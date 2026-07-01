@@ -1,0 +1,65 @@
+run:
+  timezone: Asia/Tokyo
+  lookback_days: 90
+  output_dir: reports
+
+hyperliquid:
+  enabled: true
+  min_trades: 30
+  lookback_days: 90
+  candidate_wallets_file: data/candidate_hyperliquid_wallets.csv
+
+yield:
+  enabled: true
+  min_tvl_usd: 5000000
+  min_apy: 5
+  max_apy: 40
+  chains:
+    - Ethereum
+    - Arbitrum
+    - Base
+    - Optimism
+    - Solana
+  prefer_assets:
+    - USDC
+    - USDT
+    - DAI
+    - ETH
+    - BTC
+
+dex_wallets:
+  enabled: false
+  chains:
+    - Solana
+    - Base
+  min_realized_profit_usd: 1000
+  min_tokens_traded: 5
+  exclude_new_wallet_days: 7
+  max_single_token_profit_share: 0.5
+
+filters:
+  exclude_mev: true
+  exclude_deployer_related: true
+  exclude_airdrop_farmers: true
+  exclude_cex_wallets: true
+
+clustering:
+  enabled: true
+  funding_source_lookback_hops: 2
+  max_cluster_wallets_before_sybil_flag: 10
+  detect_cex_proximity: true
+  detect_temporal_similarity: true
+  detect_contract_interaction_similarity: true
+
+scoring:
+  gaming_resistance_enabled: true
+  strategy_complexity_enabled: true
+  cross_pool_exposure_enabled: true
+  crowding_penalty_enabled: true
+
+reports:
+  hyperliquid_top_wallets_daily: true
+  hyperliquid_wallet_profiles_csv: true
+  defi_yield_watchlist: true
+  dex_smart_wallets: true
+  copyability_backtest: true
