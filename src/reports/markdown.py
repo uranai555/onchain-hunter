@@ -97,6 +97,55 @@ def generate_daily_report(wallets_df: pd.DataFrame, config: dict[str, Any]) -> s
     return "\n".join(lines)
 
 
+def generate_yield_report(yields_df: pd.DataFrame) -> str:
+    """Generate a DefiLlama yield watchlist report in markdown."""
+    title = "# DeFi 利回りウォッチリスト"
+    if yields_df.empty:
+        return "\n".join([title, "", "該当するプールは見つかりませんでした。", ""])
+
+    df = yields_df.copy()
+    watch = df[df["verdict"] == "Watch"]
+    trial = df[df["verdict"] == "Small trial"]
+    avoid = df[df["verdict"] == "Avoid"]
+
+    lines = [
+        title,
+        "",
+        f"- 全候補: {len(df)}",
+        f"- Watch: {len(watch)}",
+        f"- Small trial: {len(trial)}",
+        f"- Avoid: {len(avoid)}",
+        "",
+    ]
+
+    for section_name, section_df, max_rows in [
+        ("Watch — 監視候補", watch, 20),
+        ("Small trial — 少量トライアル候補", trial, 20),
+        ("Avoid — 回避推奨", avoid, 20),
+    ]:
+        if section_df.empty:
+            lines.extend([f"## {section_name}", "", "該当なし。", ""])
+            continue
+        lines.extend([f"## {section_name}", ""])
+        for _, row in section_df.head(max_rows).iterrows():
+            lines.extend([
+                f"### {row.get('project', '-')} / {row.get('symbol', '-')}",
+                "",
+                f"- チェーン: {row.get('chain', '-')}",
+                f"- TVL: ${_fmt_number(row.get('tvl_usd'), 0)}",
+                f"- APY: {_fmt_number(row.get('apy'))}%",
+                f"- 30日平均APY: {_fmt_number(row.get('apy_mean_30d'))}%",
+                f"- APY安定性: {_fmt_number(row.get('apy_stability_score'))}",
+                f"- ILリスク: {row.get('il_risk', '-')}",
+                f"- プール年齢: {_fmt_number(row.get('age_days'), 0)}日",
+                f"- 利回りスコア: {_fmt_number(row.get('yield_score'))}",
+                f"- 評決: **{row.get('verdict', '-')}**",
+                "",
+            ])
+
+    return "\n".join(lines)
+
+
 def generate_csv(wallets_df: pd.DataFrame, path: str) -> None:
     output_path = Path(path)
     ensure_directory(output_path.parent)
