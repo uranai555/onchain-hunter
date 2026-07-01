@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+.env
+.venv/
+venv/
+data/*.parquet
+reports/*.csv
+reports/*.md
+reports/*.parquet
