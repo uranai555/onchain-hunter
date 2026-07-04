@@ -203,11 +203,14 @@ def record_event(
     price_after: float | None = None,
     price_change_pct: float | None = None,
     description: str | None = None,
+    *,
+    auto_commit: bool = True,
 ) -> int:
     """Insert or update a discovery event. Returns the (stable) event id.
 
     Deduplicates on (event_type, event_time, symbol) so repeated daily runs over
     the same lookback window reuse the existing row instead of creating a new one.
+    Set auto_commit=False for batch operations and call conn.commit() yourself.
     """
     existing = conn.execute(
         """SELECT id FROM discovery_events
@@ -223,7 +226,8 @@ def record_event(
             (price_before, price_after, price_change_pct, description,
              existing["id"]),
         )
-        conn.commit()
+        if auto_commit:
+            conn.commit()
         return existing["id"]
     cur = conn.execute(
         """INSERT INTO discovery_events
@@ -233,7 +237,8 @@ def record_event(
         (event_type, event_time, symbol, price_before, price_after,
          price_change_pct, description),
     )
-    conn.commit()
+    if auto_commit:
+        conn.commit()
     return cur.lastrowid  # type: ignore[return-value]
 
 

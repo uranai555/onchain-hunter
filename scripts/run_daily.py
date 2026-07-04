@@ -45,6 +45,7 @@ def _fills_df_to_wallet_dict(df: pd.DataFrame) -> dict[str, list[dict[str, Any]]
 
 
 def main(dry_run: bool = False) -> None:
+    setup_logging()
     config = load_config("config.yaml")
     pipeline_cfg = PipelineConfig.from_dict(config)
     output_dir = Path(pipeline_cfg.run.output_dir)
@@ -132,6 +133,7 @@ def main(dry_run: bool = False) -> None:
                         price_after=event.get("price_after"),
                         price_change_pct=event.get("price_change_pct"),
                         description=event.get("description"),
+                        auto_commit=False,
                     )
                     # Store winners for this event
                     event_key = f"{event['event_time'][:19]}Z_{event['symbol']}_{event['event_type']}"
