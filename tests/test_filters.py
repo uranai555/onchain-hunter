@@ -9,31 +9,31 @@ from src.scoring.filters import _append_reason, _append_reasons, apply_exclusion
 
 class TestAppendReason:
     def test_empty_existing(self):
-        assert _append_reason("", "新しい理由") == "新しい理由"
+        assert _append_reason("", "new reason") == "new reason"
 
     def test_none_existing(self):
-        assert _append_reason(None, "新しい理由") == "新しい理由"
+        assert _append_reason(None, "new reason") == "new reason"
 
     def test_no_duplicate(self):
-        result = _append_reason("理由A; 理由B", "理由C")
-        assert result == "理由A; 理由B; 理由C"
+        result = _append_reason("reason A; reason B", "reason C")
+        assert result == "reason A; reason B; reason C"
 
     def test_skip_duplicate(self):
-        result = _append_reason("理由A; 理由B", "理由A")
-        assert result == "理由A; 理由B"
+        result = _append_reason("reason A; reason B", "reason A")
+        assert result == "reason A; reason B"
 
 
 class TestAppendReasons:
     def test_merge_new_reasons(self):
-        result = _append_reasons("理由A", "理由B; 理由C")
-        assert "理由A" in result
-        assert "理由B" in result
-        assert "理由C" in result
+        result = _append_reasons("reason A", "reason B; reason C")
+        assert "reason A" in result
+        assert "reason B" in result
+        assert "reason C" in result
 
     def test_deduplicate(self):
-        result = _append_reasons("理由A; 理由B", "理由A; 理由C")
+        result = _append_reasons("reason A; reason B", "reason A; reason C")
         parts = [p.strip() for p in result.split(";")]
-        assert len(parts) == 3  # A, B, C
+        assert len(parts) == 3
 
 
 class TestApplyExclusionFilters:
@@ -62,37 +62,35 @@ class TestApplyExclusionFilters:
         config = {"hyperliquid": {"min_trades": 30}, "filters": {}}
         result = apply_exclusion_filters(df, config)
         assert result.iloc[0]["excluded"]
-        assert "取引回数不足" in result.iloc[0]["exclusion_reasons"]
+        assert "insufficient trade count" in result.iloc[0]["exclusion_reasons"]
 
     def test_low_profit_factor(self):
         df = self._make_scores_df(profit_factor=1.0)
         config = {"hyperliquid": {"min_trades": 30}, "filters": {}}
         result = apply_exclusion_filters(df, config)
         assert result.iloc[0]["excluded"]
-        assert "プロフィットファクター不足" in result.iloc[0]["exclusion_reasons"]
+        assert "low profit factor" in result.iloc[0]["exclusion_reasons"]
 
     def test_high_coin_concentration(self):
         df = self._make_scores_df(max_coin_profit_share=0.7)
         config = {"hyperliquid": {"min_trades": 30}, "filters": {}}
         result = apply_exclusion_filters(df, config)
         assert result.iloc[0]["excluded"]
-        assert "単一銘柄依存" in result.iloc[0]["exclusion_reasons"]
+        assert "overdependent on one coin" in result.iloc[0]["exclusion_reasons"]
 
     def test_high_unrealized_loss(self):
         df = self._make_scores_df(unrealized_loss_to_profit=0.6)
         config = {"hyperliquid": {"min_trades": 30}, "filters": {}}
         result = apply_exclusion_filters(df, config)
         assert result.iloc[0]["excluded"]
-        assert "極端なリスク行動" in result.iloc[0]["exclusion_reasons"]
+        assert "extreme risk behavior" in result.iloc[0]["exclusion_reasons"]
 
     def test_cex_wallet(self):
-        df = self._make_scores_df(
-            wallet_address="0x0000000000000000000000000000000000000000"
-        )
+        df = self._make_scores_df(wallet_address="0x0000000000000000000000000000000000000000")
         config = {"hyperliquid": {"min_trades": 30}, "filters": {"exclude_cex_wallets": True}}
         result = apply_exclusion_filters(df, config)
         assert result.iloc[0]["excluded"]
-        assert "CEXウォレット疑い" in result.iloc[0]["exclusion_reasons"]
+        assert "cex wallet suspected" in result.iloc[0]["exclusion_reasons"]
 
     def test_empty_df(self):
         df = pd.DataFrame()
@@ -106,5 +104,5 @@ class TestApplyExclusionFilters:
         result = apply_exclusion_filters(df, config)
         assert result.iloc[0]["excluded"]
         reasons = result.iloc[0]["exclusion_reasons"]
-        assert "取引回数不足" in reasons
-        assert "プロフィットファクター不足" in reasons
+        assert "insufficient trade count" in reasons
+        assert "low profit factor" in reasons

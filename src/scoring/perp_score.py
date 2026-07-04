@@ -33,16 +33,16 @@ def _classify_style(group: pd.DataFrame, trade_count: int, avg_interval_minutes:
     avg_notional = group.get("notional", pd.Series(dtype=float)).mean()
 
     if trade_count >= 150 and avg_interval_minutes <= 30:
-        return "高レバスキャル型"
+        return "high-frequency scalper"
     if coins <= 2 and side_balance >= 0.85:
-        return "片張りホールド型"
+        return "strong directional bias"
     if trade_count >= 100 and side_balance <= 0.60:
-        return "マーケットメイクっぽい"
+        return "market-maker-like"
     if avg_interval_minutes <= 180 and avg_notional > group.get("notional", pd.Series(dtype=float)).median():
-        return "ニュース反応型"
+        return "news-reactive"
     if side_balance >= 0.70:
-        return "トレンドフォロー型"
-    return "逆張り型"
+        return "trend-following"
+    return "mean-reversion"
 
 
 @dataclass
@@ -98,7 +98,9 @@ def _score_wallet(address: str, group: pd.DataFrame, now: pd.Timestamp, min_trad
 
     max_trade_profit_share = _safe_ratio(float(pnl.max()), total_profit) if total_profit > 0 else 0.0
     coin_profit = group.groupby("coin")["closedPnl"].sum() if "coin" in group.columns else pd.Series(dtype=float)
-    max_coin_profit_share = _safe_ratio(float(coin_profit.max()), total_profit) if total_profit > 0 and not coin_profit.empty else 0.0
+    max_coin_profit_share = (
+        _safe_ratio(float(coin_profit.max()), total_profit) if total_profit > 0 and not coin_profit.empty else 0.0
+    )
 
     pnl_30d = float(group.loc[group["datetime"] >= now - pd.Timedelta(days=30), "closedPnl"].sum())
     pnl_90d = float(group.loc[group["datetime"] >= now - pd.Timedelta(days=90), "closedPnl"].sum())
@@ -116,23 +118,36 @@ def _score_wallet(address: str, group: pd.DataFrame, now: pd.Timestamp, min_trad
     interval_cv = float(intervals.std() / intervals.mean()) if len(intervals) > 1 and intervals.mean() else 0.0
 
     realized_pnl_score = _linear_score(realized_pnl, 0, 50_000)
-    risk_adjusted_return_score = _linear_score(_safe_ratio(realized_pnl, max_dd), 0, 5) if max_dd else (100.0 if realized_pnl > 0 else 0.0)
+    risk_adjusted_return_score = (
+        _linear_score(_safe_ratio(realized_pnl, max_dd), 0, 5) if max_dd else (100.0 if realized_pnl > 0 else 0.0)
+    )
     drawdown_control_score = _clip_score(100 - _linear_score(max_dd, 0, max(abs(realized_pnl), 1)))
     consistency_score = _clip_score(_safe_ratio(len(positive_days), max(len(all_days), 1)) * 100)
-    liquidity_replicability_score = _clip_score(100 - _linear_score(float(group["notional"].median()), 100_000, 2_000_000))
-    style_clarity_score = _clip_score(max(group.get("side", pd.Series(dtype=str)).value_counts(normalize=True).max() if "side" in group else 0.5, max_coin_profit_share) * 100)
+    liquidity_replicability_score = _clip_score(
+        100 - _linear_score(float(group["notional"].median()), 100_000, 2_000_000)
+    )
+    style_balance = (
+        group.get("side", pd.Series(dtype=str)).value_counts(normalize=True).max() if "side" in group else 0.5
+    )
+    style_clarity_score = _clip_score(max(style_balance, max_coin_profit_share) * 100)
     crowding_penalty_inverse = _clip_score(100 - max_coin_profit_share * 100)
 
     lot_cv = float(group["sz"].std() / group["sz"].mean()) if group["sz"].mean() else 0.0
     lot_size_naturalness_score = _clip_score(100 - abs(lot_cv - 1.0) * 35)
-    return_distribution_quality_score = _clip_score(100 - abs(float(pnl.skew() or 0)) * 15 - max_trade_profit_share * 35)
+    return_distribution_quality_score = _clip_score(
+        100 - abs(float(pnl.skew() or 0)) * 15 - max_trade_profit_share * 35
+    )
     trade_interval_naturalness_score = _clip_score(100 - abs(interval_cv - 1.0) * 30)
     sorted_group = group.sort_values("datetime")
     first_half = sorted_group.head(max(trade_count // 2, 1))["closedPnl"].sum()
     second_half = sorted_group.tail(max(trade_count // 2, 1))["closedPnl"].sum()
-    out_of_sample_survival_score = 100.0 if first_half > 0 and second_half > 0 else _linear_score(second_half, 0, max(abs(first_half), 1))
+    out_of_sample_survival_score = (
+        100.0 if first_half > 0 and second_half > 0 else _linear_score(second_half, 0, max(abs(first_half), 1))
+    )
     pnl_concentration_inverse = _clip_score(100 - max_trade_profit_share * 100)
-    leverage_tail_risk_inverse = _clip_score(100 - _linear_score(float(group["notional"].quantile(0.95)), 250_000, 5_000_000))
+    leverage_tail_risk_inverse = _clip_score(
+        100 - _linear_score(float(group["notional"].quantile(0.95)), 250_000, 5_000_000)
+    )
 
     gaming_resistance_score = _clip_score(
         0.25 * lot_size_naturalness_score
@@ -156,17 +171,17 @@ def _score_wallet(address: str, group: pd.DataFrame, now: pd.Timestamp, min_trad
 
     reasons: list[str] = []
     if trade_count < min_trades:
-        reasons.append("取引回数不足")
+        reasons.append("insufficient trade count")
     if max_trade_profit_share >= 0.50:
-        reasons.append("最大利益トレード依存")
+        reasons.append("overdependent on one winning trade")
     if max_coin_profit_share >= 0.60:
-        reasons.append("単一銘柄利益依存")
+        reasons.append("overdependent on one coin")
     if pf < 1.2:
-        reasons.append("プロフィットファクター不足")
+        reasons.append("low profit factor")
     if pnl_30d > 0 and (pnl_90d < 0 or pnl_180d < 0):
-        reasons.append("直近だけ好調")
+        reasons.append("only recently profitable")
     if realized_pnl > 0 and unrealized_loss_to_profit >= 0.50:
-        reasons.append("未実現損失過大")
+        reasons.append("excessive unrealized losses")
 
     if perp_score >= 80:
         rank = "A"

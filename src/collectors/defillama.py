@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -9,8 +8,22 @@ import pandas as pd
 import requests
 
 from src.utils.io import ensure_directory
+from src.utils.logger import get_logger
+from src.utils.retry import retry_on_http_error
 
 YIELDS_URL = "https://yields.llama.fi/pools"
+logger = get_logger("defillama")
+_SESSION = requests.Session()
+
+
+@retry_on_http_error(max_retries=3, base_delay=2.0)
+def _request_yields() -> dict[str, Any]:
+    response = _SESSION.get(YIELDS_URL, timeout=60)
+    response.raise_for_status()
+    data = response.json()
+    if not isinstance(data, dict):
+        raise ValueError(f"Unexpected DefiLlama response shape: {type(data).__name__}")
+    return data
 
 
 def fetch_yields(max_retries: int = 3) -> list[dict[str, Any]]:
@@ -18,22 +31,15 @@ def fetch_yields(max_retries: int = 3) -> list[dict[str, Any]]:
 
     Returns raw pool dicts. Empty list on failure.
     """
-    for attempt in range(max_retries):
-        try:
-            response = requests.get(YIELDS_URL, timeout=60)
-            response.raise_for_status()
-            data = response.json()
-            pools = data.get("data", [])
-            if not isinstance(pools, list):
-                raise ValueError(f"Unexpected DefiLlama response shape: {type(pools).__name__}")
-            return pools
-        except (requests.RequestException, ValueError) as exc:
-            if attempt < max_retries - 1:
-                time.sleep(2 ** attempt)
-                continue
-            print(f"[defillama] Failed to fetch yields after {max_retries} retries: {exc}")
-            return []
-    return []  # unreachable but keeps type checker happy
+    try:
+        data = _request_yields()
+        pools = data.get("data", [])
+        if not isinstance(pools, list):
+            raise ValueError(f"Unexpected DefiLlama pools shape: {type(pools).__name__}")
+        return pools
+    except (requests.RequestException, ValueError) as exc:
+        logger.warning("Failed to fetch yields after %d retries: %s", max_retries, exc)
+        return []
 
 
 def _parse_numeric(value: object) -> float:
@@ -126,21 +132,23 @@ def fetch_filtered_pools(config: dict[str, Any]) -> pd.DataFrame:
 
         is_preferred = any(asset in symbol.lower() for asset in preferred_assets)
 
-        rows.append({
-            "pool": pool_from,
-            "project": project,
-            "chain": chain,
-            "symbol": symbol,
-            "tvl_usd": tvl,
-            "apy": apy,
-            "apy_mean_30d": apy_mean_30d,
-            "apy_std": apy_std,
-            "apy_stability_score": apy_stability,
-            "il_risk": il_risk,
-            "exposure": exposure,
-            "age_days": age_days,
-            "is_preferred_asset": is_preferred,
-        })
+        rows.append(
+            {
+                "pool": pool_from,
+                "project": project,
+                "chain": chain,
+                "symbol": symbol,
+                "tvl_usd": tvl,
+                "apy": apy,
+                "apy_mean_30d": apy_mean_30d,
+                "apy_std": apy_std,
+                "apy_stability_score": apy_stability,
+                "il_risk": il_risk,
+                "exposure": exposure,
+                "age_days": age_days,
+                "is_preferred_asset": is_preferred,
+            }
+        )
 
     if not rows:
         return pd.DataFrame()

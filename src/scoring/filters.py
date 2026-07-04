@@ -4,9 +4,7 @@ from typing import Any
 
 import pandas as pd
 
-CEX_ADDRESS_PREFIXES = (
-    "0x0000000000000000000000000000000000000000",
-)
+CEX_ADDRESS_PREFIXES = ("0x0000000000000000000000000000000000000000",)
 
 
 def _append_reason(existing: object, reason: str) -> str:
@@ -36,7 +34,6 @@ def apply_exclusion_filters(df_scores: pd.DataFrame, config: dict[str, Any]) -> 
     min_trades = int(config.get("hyperliquid", {}).get("min_trades", 30))
     exclude_cex = bool(config.get("filters", {}).get("exclude_cex_wallets", True))
 
-    # Vectorized filter checks
     addresses = df.get("wallet_address", pd.Series("", index=df.index)).fillna("").str.lower()
     trade_counts = pd.to_numeric(df.get("trade_count", 0), errors="coerce").fillna(0).astype(int)
     max_coin_shares = pd.to_numeric(df.get("max_coin_profit_share", 0), errors="coerce").fillna(0.0)
@@ -52,18 +49,16 @@ def apply_exclusion_filters(df_scores: pd.DataFrame, config: dict[str, Any]) -> 
     low_pf_mask = profit_factors < 1.20
     risk_mask = unrealized_ratios >= 0.50
 
-    # Build reason strings vectorized
     reason_parts = pd.Series("", index=df.index)
     for mask, reason in [
-        (cex_mask, "CEXウォレット疑い"),
-        (low_trades_mask, "取引回数不足"),
-        (coin_dep_mask, "単一銘柄依存"),
-        (low_pf_mask, "プロフィットファクター不足"),
-        (risk_mask, "極端なリスク行動"),
+        (cex_mask, "cex wallet suspected"),
+        (low_trades_mask, "insufficient trade count"),
+        (coin_dep_mask, "overdependent on one coin"),
+        (low_pf_mask, "low profit factor"),
+        (risk_mask, "extreme risk behavior"),
     ]:
         reason_parts = reason_parts.where(~mask, reason_parts + "; " + reason)
 
-    # Merge new reasons with existing ones
     any_excluded = cex_mask | low_trades_mask | coin_dep_mask | low_pf_mask | risk_mask
     new_reasons = reason_parts.str.lstrip("; ")
     df.loc[any_excluded, "excluded"] = True
