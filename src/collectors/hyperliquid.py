@@ -128,31 +128,40 @@ def fetch_all_wallets(config: dict[str, Any]) -> pd.DataFrame:
         except Exception:
             print("[hyperliquid] Could not read existing fills cache, starting fresh")
 
-    # Determine which addresses are already in cache
-    cached_addresses: set[str] = set()
+    # Normalise cached addresses so we can fall back to cached data on failure.
+    normalise = lambda value: str(value).strip().lower()  # noqa: E731
     if not existing_fills.empty and "wallet_address" in existing_fills.columns:
-        cached_addresses = set(existing_fills["wallet_address"].dropna().astype(str).str.strip().str.lower())
+        existing_fills = existing_fills.copy()
+        existing_fills["wallet_address"] = existing_fills["wallet_address"].map(normalise)
 
+    # Re-fetch every wallet each run so scores reflect the latest fills. When a
+    # fetch fails (e.g. rate limiting), retain that wallet's cached fills so the
+    # pipeline degrades gracefully instead of dropping the wallet entirely.
     new_rows: list[dict[str, Any]] = []
+    refreshed_addresses: set[str] = set()
     for address in addresses:
-        norm = address.strip().lower()
-        if norm in cached_addresses:
-            print(f"[hyperliquid] Skipping {address[:14]}.. (already in cache)")
-            continue
+        norm = normalise(address)
         print(f"[hyperliquid] Fetching fills for {address[:14]}.. ...")
         try:
             fills = _fetch_with_retry(address, lookback_days=lookback_days)
             new_rows.extend(fills)
+            refreshed_addresses.add(norm)
             print(f"[hyperliquid]  {address[:14]}..: {len(fills)} fills")
             time.sleep(RATE_LIMIT_DELAY)
         except Exception as exc:
-            print(f"[hyperliquid]  Failed {address[:14]}..: {exc}")
+            print(f"[hyperliquid]  Failed {address[:14]}.. (keeping cached fills): {exc}")
             time.sleep(RATE_LIMIT_DELAY)
 
-    # Merge new data with existing
+    # Merge new data with existing. Drop cached rows for wallets we refreshed so
+    # freshly fetched fills replace stale ones instead of duplicating them.
     all_rows = []
     if not existing_fills.empty:
-        all_rows.append(existing_fills)
+        if "wallet_address" in existing_fills.columns and refreshed_addresses:
+            stale = existing_fills[~existing_fills["wallet_address"].isin(refreshed_addresses)]
+        else:
+            stale = existing_fills
+        if not stale.empty:
+            all_rows.append(stale)
     if new_rows:
         new_df = pd.DataFrame(new_rows)
         if not new_df.empty:

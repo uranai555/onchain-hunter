@@ -51,83 +51,91 @@ def main() -> None:
         print("[pipeline] Initialising discovery DB ...")
         db_path = discovery_cfg.get("db_path", "data/onchain_wallets.sqlite")
         conn = get_connection(db_path)
+        try:
+            # Import legacy CSV into SQLite (one-time migration)
+            csv_path = config.get("hyperliquid", {}).get(
+                "candidate_wallets_file", "data/candidate_hyperliquid_wallets.csv"
+            )
+            migration = import_from_csv(conn, csv_path)
+            if migration["imported"] > 0:
+                print(f"[pipeline]  Imported {migration['imported']} legacy wallets into SQLite")
 
-        # Import legacy CSV into SQLite (one-time migration)
-        csv_path = config.get("hyperliquid", {}).get(
-            "candidate_wallets_file", "data/candidate_hyperliquid_wallets.csv"
-        )
-        migration = import_from_csv(conn, csv_path)
-        if migration["imported"] > 0:
-            print(f"[pipeline]  Imported {migration['imported']} legacy wallets into SQLite")
+            # Get existing addresses
+            addresses = get_all_wallet_addresses(conn)
+            print(f"[pipeline]  {len(addresses)} wallet candidates in DB")
 
-        # Get existing addresses
-        addresses = get_all_wallet_addresses(conn)
-        print(f"[pipeline]  {len(addresses)} wallet candidates in DB")
-
-        if addresses:
-            print("[pipeline] Running event discovery ...")
-            symbols = event_cfg.get("symbols", ["BTC", "ETH", "SOL"])
-            lookback_days = int(event_cfg.get("lookback_days", 7))
-            result = run_event_discovery(addresses, symbols=symbols, days=lookback_days)
-
-            # Store events and winners in DB
-            for event in result.get("events", []):
-                event_id = record_event(
-                    conn,
-                    event_type=event.get("event_type", "unknown"),
-                    event_time=event.get("event_time", ""),
-                    symbol=event.get("symbol", ""),
-                    price_before=event.get("price_before"),
-                    price_after=event.get("price_after"),
-                    price_change_pct=event.get("price_change_pct"),
-                    description=event.get("description"),
+            if addresses:
+                print("[pipeline] Running event discovery ...")
+                symbols = event_cfg.get("symbols", ["BTC", "ETH", "SOL"])
+                lookback_days = int(event_cfg.get("lookback_days", 7))
+                thresholds = event_cfg.get("thresholds") or None
+                result = run_event_discovery(
+                    addresses,
+                    symbols=symbols,
+                    days=lookback_days,
+                    thresholds=thresholds,
                 )
-                # Store winners for this event
-                event_key = f"{event['event_time'][:19]}Z_{event['symbol']}_{event['event_type']}"
-                for winner in result.get("winners", {}).get(event_key, []):
-                    record_winner(
+
+                # Store events and winners in DB
+                for event in result.get("events", []):
+                    event_id = record_event(
                         conn,
-                        event_id=event_id,
-                        wallet_address=winner.get("wallet_address", ""),
-                        pre_positioning_score=winner.get("pre_positioning_score", 0),
-                        execution_score=winner.get("execution_score", 0),
-                        exit_quality=winner.get("exit_quality", 0),
-                        estimated_pnl=winner.get("estimated_pnl", 0),
-                        trade_count_in_window=winner.get("trade_count_in_window", 0),
+                        event_type=event.get("event_type", "unknown"),
+                        event_time=event.get("event_time", ""),
+                        symbol=event.get("symbol", ""),
+                        price_before=event.get("price_before"),
+                        price_after=event.get("price_after"),
+                        price_change_pct=event.get("price_change_pct"),
+                        description=event.get("description"),
                     )
+                    # Store winners for this event
+                    event_key = f"{event['event_time'][:19]}Z_{event['symbol']}_{event['event_type']}"
+                    for winner in result.get("winners", {}).get(event_key, []):
+                        record_winner(
+                            conn,
+                            event_id=event_id,
+                            wallet_address=winner.get("wallet_address", ""),
+                            pre_positioning_score=winner.get("pre_positioning_score", 0),
+                            execution_score=winner.get("execution_score", 0),
+                            exit_quality=winner.get("exit_quality", 0),
+                            estimated_pnl=winner.get("estimated_pnl", 0),
+                            trade_count_in_window=winner.get("trade_count_in_window", 0),
+                        )
 
-            # Generate discovery report
-            from src.discovery.db import get_candidates
+                # Generate discovery report
+                from src.discovery.db import get_candidates
 
-            # Candidates added THIS run (first_seen_at == created_at ≈ today)
-            import datetime as dt_mod
-            today_str = dt_mod.datetime.now(dt_mod.timezone.utc).strftime("%Y-%m-%d")
-            new_this_run = pd.read_sql_query(
-                """SELECT * FROM wallet_candidates
-                   WHERE first_seen_at >= ? AND status = 'candidate'
-                     AND source_surface != 'legacy_csv'
-                   ORDER BY raw_score DESC LIMIT 50""",
-                conn,
-                params=(today_str,),
-            )
+                # Candidates added THIS run (first_seen_at == created_at ≈ today)
+                import datetime as dt_mod
+                today_str = dt_mod.datetime.now(dt_mod.timezone.utc).strftime("%Y-%m-%d")
+                new_this_run = pd.read_sql_query(
+                    """SELECT * FROM wallet_candidates
+                       WHERE first_seen_at >= ? AND status = 'candidate'
+                         AND source_surface != 'legacy_csv'
+                       ORDER BY raw_score DESC LIMIT 50""",
+                    conn,
+                    params=(today_str,),
+                )
 
-            discovery_report = generate_discovery_report(
-                new_candidates=new_this_run,
-                events=result.get("events", []),
-                winners=result.get("winners", {}),
-                errors=result.get("errors", []),
-                existing_wallet_count=len(addresses),
-            )
-            write_text(output_dir / "discovery_report.md", discovery_report)
-            print(f"[pipeline] Discovery report -> {output_dir / 'discovery_report.md'}")
-            print(generate_discovery_report_short(
-                result.get("events_found", 0),
-                len(result.get("winners", {})),
-                len(new_this_run),
-                len(result.get("errors", [])),
-            ))
-        else:
-            print("[pipeline]  No wallet candidates found — skipping event discovery.")
+                discovery_report = generate_discovery_report(
+                    new_candidates=new_this_run,
+                    events=result.get("events", []),
+                    winners=result.get("winners", {}),
+                    errors=result.get("errors", []),
+                    existing_wallet_count=len(addresses),
+                )
+                write_text(output_dir / "discovery_report.md", discovery_report)
+                print(f"[pipeline] Discovery report -> {output_dir / 'discovery_report.md'}")
+                print(generate_discovery_report_short(
+                    result.get("events_found", 0),
+                    len(result.get("winners", {})),
+                    len(new_this_run),
+                    len(result.get("errors", [])),
+                ))
+            else:
+                print("[pipeline]  No wallet candidates found — skipping event discovery.")
+        finally:
+            conn.close()
     else:
         print("[pipeline] Discovery phase disabled in config.")
 

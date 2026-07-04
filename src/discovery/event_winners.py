@@ -352,6 +352,7 @@ def run_event_discovery(
     wallet_addresses: list[str],
     symbols: list[str] | None = None,
     days: int = 7,
+    thresholds: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     """Run full event detection + winner scoring pipeline.
 
@@ -372,7 +373,7 @@ def run_event_discovery(
     print("[discovery:events] Fetching price data and detecting events ...")
     for symbol in symbols:
         try:
-            events_df = detect_events(symbol, days=days)
+            events_df = detect_events(symbol, days=days, thresholds=thresholds)
             if not events_df.empty:
                 for _, row in events_df.iterrows():
                     all_events.append(row.to_dict())

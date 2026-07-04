@@ -44,7 +44,8 @@ CREATE TABLE IF NOT EXISTS discovery_events (
     price_after     REAL,
     price_change_pct REAL,
     description     TEXT,
-    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    UNIQUE(event_type, event_time, symbol)
 );
 
 CREATE TABLE IF NOT EXISTS event_winners (
@@ -196,7 +197,27 @@ def record_event(
     price_change_pct: float | None = None,
     description: str | None = None,
 ) -> int:
-    """Insert a discovery event. Returns the event id."""
+    """Insert or update a discovery event. Returns the (stable) event id.
+
+    Deduplicates on (event_type, event_time, symbol) so repeated daily runs over
+    the same lookback window reuse the existing row instead of creating a new one.
+    """
+    existing = conn.execute(
+        """SELECT id FROM discovery_events
+           WHERE event_type = ? AND event_time = ? AND symbol = ?""",
+        (event_type, event_time, symbol),
+    ).fetchone()
+    if existing:
+        conn.execute(
+            """UPDATE discovery_events
+               SET price_before = ?, price_after = ?,
+                   price_change_pct = ?, description = ?
+               WHERE id = ?""",
+            (price_before, price_after, price_change_pct, description,
+             existing["id"]),
+        )
+        conn.commit()
+        return existing["id"]
     cur = conn.execute(
         """INSERT INTO discovery_events
            (event_type, event_time, symbol, price_before, price_after,
@@ -314,7 +335,7 @@ def import_from_csv(conn: sqlite3.Connection, csv_path: str | Path) -> dict[str,
                (wallet_address, chain, source_surface, discovery_reason,
                 first_seen_at, last_seen_at, source_confidence, notes)
                VALUES (?, 'hyperliquid', ?, ?, ?, ?, 'medium', ?)""",
-            (address, source, discovery_reason, now, now, notes),
+            (address, "legacy_csv", discovery_reason, now, now, notes),
         )
         imported += 1
 
