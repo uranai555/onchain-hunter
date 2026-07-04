@@ -150,7 +150,7 @@ def _select_window(page: Page, window: str) -> None:
     # then click the desired option.
     try:
         # Step 1: Open the dropdown by clicking the current label
-        dds = page.locator("text=30D")
+        dds = page.get_by_text("30D", exact=True)
         count = dds.count()
         clicked = False
         for i in range(count):
@@ -169,7 +169,8 @@ def _select_window(page: Page, window: str) -> None:
         page.wait_for_timeout(1_000)
 
         # Step 2: Click the target option
-        opt = page.locator(f"text={label}").first
+        opt = page.get_by_text(label, exact=True).last
+        opt.scroll_into_view_if_needed(timeout=3_000)
         opt.click(timeout=5_000)
         page.wait_for_load_state("networkidle", timeout=10_000)
         page.wait_for_timeout(3_000)

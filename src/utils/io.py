@@ -21,17 +21,15 @@ def load_config(path: str) -> dict[str, Any]:
     return data
 
 
-def load_candidate_wallets(path: str) -> list[str]:
+def load_candidate_wallets(path: str) -> pd.DataFrame:
+    """Load candidate wallets CSV and return all columns intact."""
     csv_path = Path(path)
     if not csv_path.exists():
-        return []
+        return pd.DataFrame(columns=["wallet_address"])
     df = pd.read_csv(csv_path)
-    if df.empty:
-        return []
-    for column in ("wallet_address", "address", "wallet"):
-        if column in df.columns:
-            return [str(value).strip() for value in df[column].dropna() if str(value).strip()]
-    return [str(value).strip() for value in df.iloc[:, 0].dropna() if str(value).strip()]
+    if df.empty or "wallet_address" not in df.columns:
+        return pd.DataFrame(columns=["wallet_address"])
+    return df
 
 
 def write_text(path: str | Path, content: str) -> None:

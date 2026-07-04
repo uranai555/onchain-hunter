@@ -44,6 +44,34 @@ def _fills_df_to_wallet_dict(df: pd.DataFrame) -> dict[str, list[dict[str, Any]]
     return result
 
 
+def _log_account_value_filter_count(config: dict[str, Any]) -> None:
+    hyper_cfg = config.get("hyperliquid", {})
+    wallets_path = Path(hyper_cfg.get("candidate_wallets_file", "data/candidate_hyperliquid_wallets.csv"))
+    if not wallets_path.exists():
+        logger.info("Account value filter: candidate wallet CSV not found at %s", wallets_path)
+        return
+    try:
+        wallets_df = pd.read_csv(wallets_path)
+    except Exception as exc:
+        logger.info("Account value filter: could not read %s: %s", wallets_path, exc)
+        return
+    if wallets_df.empty or "account_value_usd" not in wallets_df.columns:
+        logger.info("Account value filter: account_value_usd metadata unavailable")
+        return
+
+    min_val = float(hyper_cfg.get("min_account_value_usd", 1000))
+    max_val = float(hyper_cfg.get("max_account_value_usd", 250000))
+    account_values = pd.to_numeric(wallets_df["account_value_usd"], errors="coerce")
+    passed = int(((account_values >= min_val) & (account_values <= max_val)).sum())
+    logger.info(
+        "Account value filter: %d/%d candidate wallets in range $%s-$%s",
+        passed,
+        len(wallets_df),
+        f"{min_val:,.0f}",
+        f"{max_val:,.0f}",
+    )
+
+
 def main(dry_run: bool = False) -> None:
     setup_logging()
     config = load_config("config.yaml")
@@ -187,6 +215,7 @@ def main(dry_run: bool = False) -> None:
         logger.info("Discovery phase disabled in config.")
 
     # ---- Phase 1 (continued): Hyperliquid scoring ----
+    filtered_df = pd.DataFrame()
     if config.get("hyperliquid", {}).get("enabled", True) and not fills_df.empty:
         scores_df = perp_score_v2(fills_df, config)
         filtered_df = apply_exclusion_filters(scores_df, config)
@@ -200,6 +229,37 @@ def main(dry_run: bool = False) -> None:
         logger.info("No Hyperliquid fills to score.")
     else:
         logger.info("Hyperliquid phase disabled in config.")
+    if config.get("hyperliquid", {}).get("enabled", True):
+        _log_account_value_filter_count(config)
+
+    # ---- Phase 3: Strategy Fingerprint Analysis ----
+    fingerprint_cfg = config.get("fingerprint", {})
+    if fingerprint_cfg.get("enabled", False):
+        if fills_df.empty or filtered_df.empty:
+            logger.info("No scored Hyperliquid wallets available for fingerprint analysis.")
+        else:
+            logger.info("Running strategy fingerprint analysis ...")
+            from src.analysis.fingerprint import extract_fingerprint
+            from src.analysis.report import generate_fingerprint_report
+
+            wallets_to_analyze = filtered_df["wallet_address"].dropna().unique().tolist()
+            min_trades = int(fingerprint_cfg.get("min_trades_for_analysis", 50))
+            report_limit = int(fingerprint_cfg.get("report_top_wallets", 10))
+            if report_limit > 0:
+                wallets_to_analyze = wallets_to_analyze[:report_limit]
+
+            fingerprints = []
+            for addr in wallets_to_analyze:
+                wallet_fills = fills_df[fills_df["wallet_address"] == addr]
+                if len(wallet_fills) >= min_trades:
+                    fp = extract_fingerprint(wallet_fills, addr)
+                    fingerprints.append(fp)
+
+            generate_fingerprint_report(
+                fingerprints,
+                fingerprint_cfg.get("output_dir", "reports/strategy_fingerprint"),
+            )
+            logger.info("Fingerprint analysis complete for %d wallets", len(fingerprints))
 
     # ---- Phase 2: DefiLlama ----
     if config.get("yield", {}).get("enabled", True):
