@@ -132,7 +132,27 @@ def fetch_all_wallets(config: dict[str, Any]) -> pd.DataFrame:
     output_path = Path(hyper_cfg.get("fills_output_file", "data/hyperliquid_fills.parquet"))
     cache_ttl_hours = float(hyper_cfg.get("cache_ttl_hours", 0))
 
-    addresses = load_candidate_wallets(wallets_path)
+    # Load wallets with account value metadata.
+    addresses = []
+    wallets_df = load_candidate_wallets(wallets_path)
+    if isinstance(wallets_df, pd.DataFrame) and not wallets_df.empty:
+        if "account_value_usd" in wallets_df.columns:
+            min_val = float(hyper_cfg.get("min_account_value_usd", 1000))
+            max_val = float(hyper_cfg.get("max_account_value_usd", 250000))
+            account_values = pd.to_numeric(wallets_df["account_value_usd"], errors="coerce")
+            wallets_df = wallets_df[
+                (account_values >= min_val) &
+                (account_values <= max_val)
+            ]
+            print(
+                f"[hyperliquid] Account value filter: {len(wallets_df)} wallets "
+                f"in range ${min_val:,.0f}-${max_val:,.0f}"
+            )
+        addresses = wallets_df["wallet_address"].dropna().astype(str).str.strip().str.lower().tolist()
+    elif isinstance(wallets_df, list):
+        addresses = wallets_df
+    else:
+        addresses = []
     if not addresses:
         print("[hyperliquid] No candidate wallets found.")
         return pd.DataFrame()
@@ -141,6 +161,9 @@ def fetch_all_wallets(config: dict[str, Any]) -> pd.DataFrame:
     if _cache_is_fresh(output_path, cache_ttl_hours):
         try:
             cached = pd.read_parquet(output_path)
+            if not cached.empty and "wallet_address" in cached.columns and addresses:
+                cached_addresses = cached["wallet_address"].astype(str).str.strip().str.lower()
+                cached = cached[cached_addresses.isin(addresses)]
             print(f"[hyperliquid] Cache is fresh ({cache_ttl_hours}h TTL), using {len(cached)} cached fills")
             return cached
         except Exception:
