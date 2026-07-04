@@ -16,10 +16,9 @@ API sources (no API key required):
 from __future__ import annotations
 
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from typing import Any
 
-import numpy as np
 import pandas as pd
 import requests
 
@@ -149,83 +148,83 @@ def detect_events(
 
     events: list[dict[str, Any]] = []
 
-    # 24-hour windows (hourly data, so 24 rows = 24h)
+    # 24-hour windows (hourly data, so 24 rows = 24h) — vectorized
     window_24h = 24
     if len(df) > window_24h:
         df["price_24h_ago"] = df["price"].shift(window_24h)
         df["change_24h_pct"] = (df["price"] - df["price_24h_ago"]) / df["price_24h_ago"] * 100
 
-        for _, row in df.iterrows():
-            if pd.isna(row.get("change_24h_pct")):
-                continue
+        valid_24 = df.dropna(subset=["change_24h_pct"])
+        drops_24 = valid_24[valid_24["change_24h_pct"] <= thresholds["sharp_drop"]]
+        rises_24 = valid_24[valid_24["change_24h_pct"] >= thresholds["sharp_rise"]]
+
+        for _, row in drops_24.iterrows():
             change = row["change_24h_pct"]
-            ts = row["timestamp"]
+            events.append({
+                "event_type": "sharp_drop",
+                "event_time": row["timestamp"].isoformat(),
+                "symbol": symbol.upper(),
+                "price_before": float(row["price_24h_ago"]),
+                "price_after": float(row["price"]),
+                "price_change_pct": round(change, 2),
+                "description": (
+                    f"{symbol} {change:+.2f}% in 24h "
+                    f"(${float(row['price_24h_ago']):,.0f} → ${float(row['price']):,.0f})"
+                ),
+            })
+        for _, row in rises_24.iterrows():
+            change = row["change_24h_pct"]
+            events.append({
+                "event_type": "sharp_rise",
+                "event_time": row["timestamp"].isoformat(),
+                "symbol": symbol.upper(),
+                "price_before": float(row["price_24h_ago"]),
+                "price_after": float(row["price"]),
+                "price_change_pct": round(change, 2),
+                "description": (
+                    f"{symbol} {change:+.2f}% in 24h "
+                    f"(${float(row['price_24h_ago']):,.0f} → ${float(row['price']):,.0f})"
+                ),
+            })
 
-            if change <= thresholds["sharp_drop"]:
-                events.append({
-                    "event_type": "sharp_drop",
-                    "event_time": ts.isoformat(),
-                    "symbol": symbol.upper(),
-                    "price_before": float(row["price_24h_ago"]),
-                    "price_after": float(row["price"]),
-                    "price_change_pct": round(change, 2),
-                    "description": (
-                        f"{symbol} {change:+.2f}% in 24h "
-                        f"(${float(row['price_24h_ago']):,.0f} → ${float(row['price']):,.0f})"
-                    ),
-                })
-            elif change >= thresholds["sharp_rise"]:
-                events.append({
-                    "event_type": "sharp_rise",
-                    "event_time": ts.isoformat(),
-                    "symbol": symbol.upper(),
-                    "price_before": float(row["price_24h_ago"]),
-                    "price_after": float(row["price"]),
-                    "price_change_pct": round(change, 2),
-                    "description": (
-                        f"{symbol} {change:+.2f}% in 24h "
-                        f"(${float(row['price_24h_ago']):,.0f} → ${float(row['price']):,.0f})"
-                    ),
-                })
-
-    # 48-hour windows for major events
+    # 48-hour windows for major events — vectorized
     window_48h = 48
     if len(df) > window_48h:
         df["price_48h_ago"] = df["price"].shift(window_48h)
         df["change_48h_pct"] = (df["price"] - df["price_48h_ago"]) / df["price_48h_ago"] * 100
 
-        for _, row in df.iterrows():
-            if pd.isna(row.get("change_48h_pct")):
-                continue
-            change = row["change_48h_pct"]
-            ts = row["timestamp"]
+        valid_48 = df.dropna(subset=["change_48h_pct"])
+        drops_48 = valid_48[valid_48["change_48h_pct"] <= thresholds["major_drop"]]
+        rises_48 = valid_48[valid_48["change_48h_pct"] >= thresholds["major_rise"]]
 
-            if change <= thresholds["major_drop"]:
-                events.append({
-                    "event_type": "major_drop",
-                    "event_time": ts.isoformat(),
-                    "symbol": symbol.upper(),
-                    "price_before": float(row["price_48h_ago"]),
-                    "price_after": float(row["price"]),
-                    "price_change_pct": round(change, 2),
-                    "description": (
-                        f"{symbol} {change:+.2f}% in 48h "
-                        f"(${float(row['price_48h_ago']):,.0f} → ${float(row['price']):,.0f})"
-                    ),
-                })
-            elif change >= thresholds["major_rise"]:
-                events.append({
-                    "event_type": "major_rise",
-                    "event_time": ts.isoformat(),
-                    "symbol": symbol.upper(),
-                    "price_before": float(row["price_48h_ago"]),
-                    "price_after": float(row["price"]),
-                    "price_change_pct": round(change, 2),
-                    "description": (
-                        f"{symbol} {change:+.2f}% in 48h "
-                        f"(${float(row['price_48h_ago']):,.0f} → ${float(row['price']):,.0f})"
-                    ),
-                })
+        for _, row in drops_48.iterrows():
+            change = row["change_48h_pct"]
+            events.append({
+                "event_type": "major_drop",
+                "event_time": row["timestamp"].isoformat(),
+                "symbol": symbol.upper(),
+                "price_before": float(row["price_48h_ago"]),
+                "price_after": float(row["price"]),
+                "price_change_pct": round(change, 2),
+                "description": (
+                    f"{symbol} {change:+.2f}% in 48h "
+                    f"(${float(row['price_48h_ago']):,.0f} → ${float(row['price']):,.0f})"
+                ),
+            })
+        for _, row in rises_48.iterrows():
+            change = row["change_48h_pct"]
+            events.append({
+                "event_type": "major_rise",
+                "event_time": row["timestamp"].isoformat(),
+                "symbol": symbol.upper(),
+                "price_before": float(row["price_48h_ago"]),
+                "price_after": float(row["price"]),
+                "price_change_pct": round(change, 2),
+                "description": (
+                    f"{symbol} {change:+.2f}% in 48h "
+                    f"(${float(row['price_48h_ago']):,.0f} → ${float(row['price']):,.0f})"
+                ),
+            })
 
     # Deduplicate raw events by (event_type, event_time, symbol)
     events_df = pd.DataFrame(events)

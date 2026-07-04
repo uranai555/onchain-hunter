@@ -14,7 +14,6 @@ if str(ROOT) not in sys.path:
 from src.collectors.hyperliquid_leaderboard import fetch_leaderboard_wallets
 from src.utils.io import ensure_directory, load_config
 
-
 DEFAULT_WINDOWS = ["7d", "30d", "90d"]
 CSV_COLUMNS = ["wallet_address", "source", "rank", "name", "notes"]
 

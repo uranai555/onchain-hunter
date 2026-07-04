@@ -6,17 +6,9 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-
-def _clip_score(value: float) -> float:
-    if pd.isna(value) or not np.isfinite(value):
-        return 0.0
-    return float(np.clip(value, 0.0, 100.0))
-
-
-def _linear_score(value: float, low: float, high: float) -> float:
-    if high == low:
-        return 0.0
-    return _clip_score((value - low) / (high - low) * 100.0)
+from src.utils.scoring import clip_score as _clip_score
+from src.utils.scoring import linear_score as _linear_score
+from src.utils.scoring import safe_ratio as _safe_ratio
 
 
 def _profit_factor(pnl: pd.Series) -> float:
@@ -32,10 +24,6 @@ def _max_drawdown(pnl: pd.Series) -> float:
     peak = equity.cummax()
     drawdown = equity - peak
     return float(abs(drawdown.min())) if len(drawdown) else 0.0
-
-
-def _safe_ratio(numerator: float, denominator: float) -> float:
-    return float(numerator / denominator) if denominator else 0.0
 
 
 def _classify_style(group: pd.DataFrame, trade_count: int, avg_interval_minutes: float) -> str:
@@ -100,7 +88,7 @@ def _score_wallet(address: str, group: pd.DataFrame, now: pd.Timestamp, min_trad
     group["datetime"] = pd.to_datetime(group.get("datetime", pd.NaT), utc=True, errors="coerce")
 
     pnl = group["closedPnl"]
-    trade_count = int(len(group))
+    trade_count = len(group)
     realized_pnl = float(pnl.sum())
     total_profit = float(pnl[pnl > 0].sum())
     pf = _profit_factor(pnl)
@@ -139,8 +127,9 @@ def _score_wallet(address: str, group: pd.DataFrame, now: pd.Timestamp, min_trad
     lot_size_naturalness_score = _clip_score(100 - abs(lot_cv - 1.0) * 35)
     return_distribution_quality_score = _clip_score(100 - abs(float(pnl.skew() or 0)) * 15 - max_trade_profit_share * 35)
     trade_interval_naturalness_score = _clip_score(100 - abs(interval_cv - 1.0) * 30)
-    first_half = group.sort_values("datetime").head(max(trade_count // 2, 1))["closedPnl"].sum()
-    second_half = group.sort_values("datetime").tail(max(trade_count // 2, 1))["closedPnl"].sum()
+    sorted_group = group.sort_values("datetime")
+    first_half = sorted_group.head(max(trade_count // 2, 1))["closedPnl"].sum()
+    second_half = sorted_group.tail(max(trade_count // 2, 1))["closedPnl"].sum()
     out_of_sample_survival_score = 100.0 if first_half > 0 and second_half > 0 else _linear_score(second_half, 0, max(abs(first_half), 1))
     pnl_concentration_inverse = _clip_score(100 - max_trade_profit_share * 100)
     leverage_tail_risk_inverse = _clip_score(100 - _linear_score(float(group["notional"].quantile(0.95)), 250_000, 5_000_000))

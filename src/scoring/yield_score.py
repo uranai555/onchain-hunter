@@ -2,27 +2,11 @@ from __future__ import annotations
 
 from typing import Any
 
-import numpy as np
 import pandas as pd
 
-
-def _clip_score(value: float) -> float:
-    if pd.isna(value) or not np.isfinite(value):
-        return 0.0
-    return float(np.clip(value, 0.0, 100.0))
-
-
-def _linear_score(value: float, low: float, high: float) -> float:
-    if high == low:
-        return 0.0
-    return _clip_score((value - low) / (high - low) * 100.0)
-
-
-def _inverse_linear_score(value: float, low: float, high: float) -> float:
-    """Higher raw value → lower score (e.g. APY volatility)."""
-    if high == low:
-        return 50.0
-    return _clip_score((high - value) / (high - low) * 100.0)
+from src.utils.scoring import clip_score as _clip_score
+from src.utils.scoring import inverse_linear_score as _inverse_linear_score
+from src.utils.scoring import linear_score as _linear_score
 
 
 def score_yields(df: pd.DataFrame, config: dict[str, Any]) -> pd.DataFrame:
