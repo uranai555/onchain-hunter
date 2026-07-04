@@ -7,3 +7,4 @@ wallet_address,source,rank,name,notes
 0xb83de012dba672c76a7dbbbf3e459cb59d7d6e36,hyperliquid_leaderboard,8,,匿名ウォレット
 0x45d26f28196d226497130c4bac709d808fed4029,hyperliquid_leaderboard,9,,匿名ウォレット
 0x8cfac7c6f03e00db2f298699df96933a9694b6ab,hyperliquid_leaderboard,9,,匿名ウォレット
+0x7fdafde5cfb5465924316eced2d3715494c517d1,hyperliquid_leaderboard,1,BobbyBigSize,"window=7d; account_value=$29,704,710.25; pnl=$17,785,402.14; roi=46.25%; volume=$1,522,756,996.43"

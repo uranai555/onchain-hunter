@@ -4,6 +4,9 @@ __pycache__/
 .venv/
 venv/
 data/*.parquet
+data/*.sqlite
+data/*.sqlite-wal
+data/*.sqlite-shm
 reports/*.csv
 reports/*.md
 reports/*.parquet
