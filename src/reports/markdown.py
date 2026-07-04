@@ -19,41 +19,41 @@ def _fmt_number(value: object, digits: int = 2) -> str:
 
 
 def _wallet_block(row: pd.Series) -> list[str]:
-    gr = float(row.get('gaming_resistance_score', 0) or 0)
+    gr = float(row.get("gaming_resistance_score", 0) or 0)
     gr_v = "Normal" if gr >= 60 else ("Suspicious" if gr >= 40 else "Exclude")
     return [
         f"### {row.get('wallet_address', '-')}",
         "",
-        f"- ランク: {row.get('rank', '-')}",
+        f"- Rank: {row.get('rank', '-')}",
         f"- perp_score_v2: {_fmt_number(row.get('perp_score_v2'))}",
-        f"- 取引スタイル: {row.get('trade_style', '-')}",
-        f"- 取引回数: {_fmt_number(row.get('trade_count'), 0)}",
-        f"- 実現損益: {_fmt_number(row.get('realized_pnl'))}",
-        f"- プロフィットファクター: {_fmt_number(row.get('profit_factor'))}",
-        f"- 最大ドローダウン: {_fmt_number(row.get('max_drawdown'))}",
-        f"- 最大利益トレード比率: {_fmt_number(float(row.get('max_trade_profit_share', 0)) * 100)}%",
-        f"- 最大利益銘柄比率: {_fmt_number(float(row.get('max_coin_profit_share', 0)) * 100)}%",
-        f"- 30日損益: {_fmt_number(row.get('pnl_30d'))}",
-        f"- 90日損益: {_fmt_number(row.get('pnl_90d'))}",
-        f"- 180日損益: {_fmt_number(row.get('pnl_180d'))}",
+        f"- Trade style: {row.get('trade_style', '-')}",
+        f"- Trade count: {_fmt_number(row.get('trade_count'), 0)}",
+        f"- Realized PnL: {_fmt_number(row.get('realized_pnl'))}",
+        f"- Profit factor: {_fmt_number(row.get('profit_factor'))}",
+        f"- Max drawdown: {_fmt_number(row.get('max_drawdown'))}",
+        f"- Max trade profit share: {_fmt_number(float(row.get('max_trade_profit_share', 0)) * 100)}%",
+        f"- Max coin profit share: {_fmt_number(float(row.get('max_coin_profit_share', 0)) * 100)}%",
+        f"- 30D PnL: {_fmt_number(row.get('pnl_30d'))}",
+        f"- 90D PnL: {_fmt_number(row.get('pnl_90d'))}",
+        f"- 180D PnL: {_fmt_number(row.get('pnl_180d'))}",
         "",
         "#### Gaming Resistance",
-        f"- 総合スコア: {_fmt_number(gr)} — {gr_v}",
-        f"- ロットサイズ自然性: {_fmt_number(row.get('lot_size_naturalness_score'))}",
-        f"- 損益分布品質: {_fmt_number(row.get('return_distribution_quality_score'))}",
-        f"- 取引間隔自然性: {_fmt_number(row.get('trade_interval_naturalness_score'))}",
-        f"- アウトオブサンプル生存: {_fmt_number(row.get('out_of_sample_survival_score'))}",
-        f"- PnL集中度逆転: {_fmt_number(row.get('pnl_concentration_inverse'))}",
-        f"- レバレッジテールリスク逆転: {_fmt_number(row.get('leverage_tail_risk_inverse'))}",
-        f"- 未実現損失/利益比率: {_fmt_number(float(row.get('unrealized_loss_to_profit', 0)) * 100)}%",
+        f"- Composite score: {_fmt_number(gr)} - {gr_v}",
+        f"- Lot size naturalness: {_fmt_number(row.get('lot_size_naturalness_score'))}",
+        f"- Return distribution quality: {_fmt_number(row.get('return_distribution_quality_score'))}",
+        f"- Trade interval naturalness: {_fmt_number(row.get('trade_interval_naturalness_score'))}",
+        f"- Out-of-sample survival: {_fmt_number(row.get('out_of_sample_survival_score'))}",
+        f"- PnL concentration inverse: {_fmt_number(row.get('pnl_concentration_inverse'))}",
+        f"- Leverage tail-risk inverse: {_fmt_number(row.get('leverage_tail_risk_inverse'))}",
+        f"- Unrealized loss / profit: {_fmt_number(float(row.get('unrealized_loss_to_profit', 0)) * 100)}%",
         "",
     ]
 
 
 def generate_daily_report(wallets_df: pd.DataFrame, config: dict[str, Any]) -> str:
-    title = "# Hyperliquid Perp 勝ちウォレット日次レポート"
+    title = "# Hyperliquid Perp Winning Wallets Daily Report"
     if wallets_df.empty:
-        return "\n".join([title, "", "候補ウォレットのスコアリング結果はありません。", ""])
+        return "\n".join([title, "", "No scored candidate wallets.", ""])
 
     df = wallets_df.copy().sort_values(["excluded", "rank", "perp_score_v2"], ascending=[True, True, False])
     active = df[~df["excluded"].fillna(False)]
@@ -62,34 +62,34 @@ def generate_daily_report(wallets_df: pd.DataFrame, config: dict[str, Any]) -> s
     lines = [
         title,
         "",
-        f"- 対象ウォレット数: {len(df)}",
-        f"- 採用候補: {len(active)}",
-        f"- 除外: {len(excluded)}",
+        f"- Wallets scored: {len(df)}",
+        f"- Active candidates: {len(active)}",
+        f"- Excluded: {len(excluded)}",
         "",
     ]
 
     for rank in ("A", "B", "C", "D"):
         rank_df = active[active["rank"] == rank]
-        lines.extend([f"## {rank}ランク", ""])
+        lines.extend([f"## Rank {rank}", ""])
         if rank_df.empty:
-            lines.extend(["該当なし。", ""])
+            lines.extend(["None.", ""])
             continue
         for _, row in rank_df.iterrows():
             lines.extend(_wallet_block(row))
 
-    lines.extend(["## 除外ウォレット", ""])
+    lines.extend(["## Excluded Wallets", ""])
     if excluded.empty:
-        lines.extend(["該当なし。", ""])
+        lines.extend(["None.", ""])
     else:
         for _, row in excluded.iterrows():
             lines.extend(
                 [
                     f"### {row.get('wallet_address', '-')}",
                     "",
-                    f"- 除外理由: {row.get('exclusion_reasons', '-') or '-'}",
+                    f"- Exclusion reasons: {row.get('exclusion_reasons', '-') or '-'}",
                     f"- perp_score_v2: {_fmt_number(row.get('perp_score_v2'))}",
-                    f"- 取引回数: {_fmt_number(row.get('trade_count'), 0)}",
-                    f"- 実現損益: {_fmt_number(row.get('realized_pnl'))}",
+                    f"- Trade count: {_fmt_number(row.get('trade_count'), 0)}",
+                    f"- Realized PnL: {_fmt_number(row.get('realized_pnl'))}",
                     "",
                 ]
             )
@@ -99,9 +99,9 @@ def generate_daily_report(wallets_df: pd.DataFrame, config: dict[str, Any]) -> s
 
 def generate_yield_report(yields_df: pd.DataFrame) -> str:
     """Generate a DefiLlama yield watchlist report in markdown."""
-    title = "# DeFi 利回りウォッチリスト"
+    title = "# DeFi Yield Watchlist"
     if yields_df.empty:
-        return "\n".join([title, "", "該当するプールは見つかりませんでした。", ""])
+        return "\n".join([title, "", "No matching pools found.", ""])
 
     df = yields_df.copy()
     watch = df[df["verdict"] == "Watch"]
@@ -111,7 +111,7 @@ def generate_yield_report(yields_df: pd.DataFrame) -> str:
     lines = [
         title,
         "",
-        f"- 全候補: {len(df)}",
+        f"- Total candidates: {len(df)}",
         f"- Watch: {len(watch)}",
         f"- Small trial: {len(trial)}",
         f"- Avoid: {len(avoid)}",
@@ -119,29 +119,31 @@ def generate_yield_report(yields_df: pd.DataFrame) -> str:
     ]
 
     for section_name, section_df, max_rows in [
-        ("Watch — 監視候補", watch, 20),
-        ("Small trial — 少量トライアル候補", trial, 20),
-        ("Avoid — 回避推奨", avoid, 20),
+        ("Watch - monitoring candidates", watch, 20),
+        ("Small trial - small-size candidates", trial, 20),
+        ("Avoid - skip candidates", avoid, 20),
     ]:
         if section_df.empty:
-            lines.extend([f"## {section_name}", "", "該当なし。", ""])
+            lines.extend([f"## {section_name}", "", "None.", ""])
             continue
         lines.extend([f"## {section_name}", ""])
         for _, row in section_df.head(max_rows).iterrows():
-            lines.extend([
-                f"### {row.get('project', '-')} / {row.get('symbol', '-')}",
-                "",
-                f"- チェーン: {row.get('chain', '-')}",
-                f"- TVL: ${_fmt_number(row.get('tvl_usd'), 0)}",
-                f"- APY: {_fmt_number(row.get('apy'))}%",
-                f"- 30日平均APY: {_fmt_number(row.get('apy_mean_30d'))}%",
-                f"- APY安定性: {_fmt_number(row.get('apy_stability_score'))}",
-                f"- ILリスク: {row.get('il_risk', '-')}",
-                f"- プール年齢: {_fmt_number(row.get('age_days'), 0)}日",
-                f"- 利回りスコア: {_fmt_number(row.get('yield_score'))}",
-                f"- 評決: **{row.get('verdict', '-')}**",
-                "",
-            ])
+            lines.extend(
+                [
+                    f"### {row.get('project', '-')} / {row.get('symbol', '-')}",
+                    "",
+                    f"- Chain: {row.get('chain', '-')}",
+                    f"- TVL: ${_fmt_number(row.get('tvl_usd'), 0)}",
+                    f"- APY: {_fmt_number(row.get('apy'))}%",
+                    f"- 30D mean APY: {_fmt_number(row.get('apy_mean_30d'))}%",
+                    f"- APY stability: {_fmt_number(row.get('apy_stability_score'))}",
+                    f"- IL risk: {row.get('il_risk', '-')}",
+                    f"- Pool age: {_fmt_number(row.get('age_days'), 0)} days",
+                    f"- Yield score: {_fmt_number(row.get('yield_score'))}",
+                    f"- Verdict: **{row.get('verdict', '-')}**",
+                    "",
+                ]
+            )
 
     return "\n".join(lines)
 

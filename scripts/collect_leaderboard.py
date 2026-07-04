@@ -84,11 +84,22 @@ def collect_leaderboard_candidates(config: dict[str, Any] | None = None) -> dict
     output_path = Path(hyper_cfg.get("candidate_wallets_file", "data/candidate_hyperliquid_wallets.csv"))
 
     all_rows: list[dict[str, Any]] = []
+    failed_windows: list[str] = []
     for window in windows:
         print(f"[leaderboard] Collecting {window} leaderboard through rank {max_rank} ...")
-        window_rows = fetch_leaderboard_wallets(str(window), max_rank=max_rank)
+        try:
+            window_rows = fetch_leaderboard_wallets(str(window), max_rank=max_rank)
+        except Exception as exc:
+            failed_windows.append(str(window))
+            print(f"[leaderboard] {window}: failed ({exc}); continuing with other windows")
+            continue
         print(f"[leaderboard] {window}: collected {len(window_rows)} public wallet rows")
         all_rows.extend(window_rows)
+
+    if not all_rows:
+        if failed_windows:
+            print(f"[leaderboard] No rows collected; failed windows: {', '.join(failed_windows)}")
+        return {"collected": 0, "new": 0, "existing": 0}
 
     best_by_address = _best_rows_by_address(all_rows)
     existing = _load_existing_addresses(output_path)
@@ -107,6 +118,8 @@ def collect_leaderboard_candidates(config: dict[str, Any] | None = None) -> dict
         f"{len(new_candidates)} new, "
         f"{existing_count} already present"
     )
+    if failed_windows:
+        print(f"[leaderboard] Failed windows: {', '.join(failed_windows)}")
     print(f"[leaderboard] Candidate CSV -> {output_path}")
     return {"collected": len(all_rows), "new": len(new_candidates), "existing": existing_count}
 

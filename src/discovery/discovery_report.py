@@ -1,12 +1,4 @@
-"""Render discovery report in Markdown.
-
-Generates reports/discovery_report.md with:
-  - Summary of discovery runs
-  - New candidates this run
-  - Recent detected events
-  - Event winners
-  - Watchlist changes
-"""
+"""Render discovery report in Markdown."""
 
 from __future__ import annotations
 
@@ -41,36 +33,33 @@ def generate_discovery_report(
     events_with_winners = len(winners)
 
     lines: list[str] = [
-        "# オンチェーンウォレット発見レポート",
+        "# Onchain Wallet Discovery Report",
         "",
-        f"**生成時刻**: {now}",
-        f"**既存候補数**: {existing_wallet_count}",
-        f"**検出イベント数**: {total_events}",
-        f"**勝者マッチイベント数**: {events_with_winners}",
+        f"**Generated at**: {now}",
+        f"**Existing candidates**: {existing_wallet_count}",
+        f"**Detected events**: {total_events}",
+        f"**Events with winners**: {events_with_winners}",
         "",
     ]
 
-    # ── Errors ──
     if errors:
-        lines.extend([
-            "## エラー",
-            "",
-        ])
+        lines.extend(["## Errors", ""])
         for err in errors[:5]:
-            lines.append(f"- ⚠️ {err}")
+            lines.append(f"- Warning: {err}")
         if len(errors) > 5:
-            lines.append(f"- ... 他 {len(errors) - 5} 件")
+            lines.append(f"- ... {len(errors) - 5} more")
         lines.append("")
 
-    # ── New candidates ──
     if not new_candidates.empty:
-        lines.extend([
-            "---",
-            "## 新規候補ウォレット",
-            "",
-            "| アドレス | 発見面 | 理由 | 信頼度 | スコア |",
-            "|---------|--------|------|--------|-------|",
-        ])
+        lines.extend(
+            [
+                "---",
+                "## New Candidate Wallets",
+                "",
+                "| Address | Surface | Reason | Confidence | Score |",
+                "|---------|---------|--------|------------|-------|",
+            ]
+        )
         for _, row in new_candidates.iterrows():
             addr = str(row.get("wallet_address", ""))[:14] + "..."
             surface = str(row.get("source_surface", "-"))
@@ -80,15 +69,16 @@ def generate_discovery_report(
             lines.append(f"| {addr} | {surface} | {reason} | {confidence} | {score} |")
         lines.append("")
 
-    # ── Detected events ──
     if events:
-        lines.extend([
-            "---",
-            "## 検出イベント",
-            "",
-            "| 時刻 (UTC) | 銘柄 | 種別 | 変動率 | 説明 |",
-            "|-----------|------|------|--------|------|",
-        ])
+        lines.extend(
+            [
+                "---",
+                "## Detected Events",
+                "",
+                "| Time (UTC) | Symbol | Type | Change | Description |",
+                "|------------|--------|------|--------|-------------|",
+            ]
+        )
         for ev in sorted(events, key=lambda e: e.get("event_time", ""), reverse=True)[:20]:
             ts = str(ev.get("event_time", ""))[:19]
             symbol = ev.get("symbol", "-")
@@ -98,46 +88,46 @@ def generate_discovery_report(
             lines.append(f"| {ts} | {symbol} | {etype} | {change} | {desc} |")
         lines.append("")
 
-    # ── Event winners ──
     if winners:
-        lines.extend([
-            "---",
-            "## イベント勝者",
-            "",
-        ])
+        lines.extend(["---", "## Event Winners", ""])
         for event_key in sorted(winners.keys(), reverse=True)[:10]:
             wallet_list = winners[event_key]
-            lines.extend([
-                f"### {event_key}",
-                "",
-                f"**該当ウォレット数**: {len(wallet_list)}",
-                "",
-                "| アドレス | 事前ポジション | エントリー品質 | 利確品質 | 推定PnL | 取引数 |",
-                "|---------|---------------|--------------|---------|--------|-------|",
-            ])
+            lines.extend(
+                [
+                    f"### {event_key}",
+                    "",
+                    f"**Matching wallets**: {len(wallet_list)}",
+                    "",
+                    "| Address | Winner Score | Pre-positioning | Direction Match | Entry Quality | Exit Quality | Est. PnL | Trades |",
+                    "|---------|--------------|-----------------|-----------------|---------------|--------------|----------|--------|",
+                ]
+            )
             for w in wallet_list[:5]:
                 addr = str(w.get("wallet_address", ""))[:14] + "..."
+                winner_score = _fmt_number(w.get("event_winner_score", 0), 0)
                 pre = _fmt_number(w.get("pre_positioning_score", 0), 0)
+                alignment = _fmt_number(w.get("direction_alignment_score", 0), 0)
                 exec_ = _fmt_number(w.get("execution_score", 0), 0)
                 exit_ = _fmt_number(w.get("exit_quality", 0), 0)
                 pnl = _fmt_number(w.get("estimated_pnl", 0))
                 tc = int(w.get("trade_count_in_window", 0))
-                lines.append(f"| {addr} | {pre} | {exec_} | {exit_} | {pnl} | {tc} |")
+                lines.append(f"| {addr} | {winner_score} | {pre} | {alignment} | {exec_} | {exit_} | {pnl} | {tc} |")
             if len(wallet_list) > 5:
-                lines.append(f"| ... 他 {len(wallet_list) - 5} 件 |")
+                lines.append(f"| ... {len(wallet_list) - 5} more | | | | | | | |")
             lines.append("")
 
-    # ── Summary ──
-    lines.extend([
-        "---",
-        "## サマリー",
-        "",
-        f"- 検出イベント数: {total_events}",
-        f"- 勝者ウォレットありイベント: {events_with_winners}",
-        f"- 新規候補: {len(new_candidates)}",
-        f"- エラー: {len(errors)}",
-        "",
-    ])
+    lines.extend(
+        [
+            "---",
+            "## Summary",
+            "",
+            f"- Detected events: {total_events}",
+            f"- Events with winner wallets: {events_with_winners}",
+            f"- New candidates: {len(new_candidates)}",
+            f"- Errors: {len(errors)}",
+            "",
+        ]
+    )
 
     return "\n".join(lines)
 
@@ -150,10 +140,9 @@ def generate_discovery_report_short(
 ) -> str:
     """Short summary for the pipeline log."""
     lines = [
-        "── Discovery Report ──",
+        "Discovery Report",
         f"Events: {events_found} detected, {events_with_winners} with winners",
         f"New candidates: {new_candidates}",
         f"Errors: {errors}",
-        "─────────────────────",
     ]
     return "\n".join(lines)

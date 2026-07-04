@@ -1,31 +1,41 @@
 # Onchain Smart Money Hunter
 
-オンチェーンで「勝っているように見える」ウォレットを疑い、再現可能な行動だけを残す分析パイプライン。
+Pipeline for finding on-chain wallets that show repeatable, copyable trading behavior rather than only headline PnL.
 
-**設計思想:** [onchain-smart-money-hunter SKILL.md](../.hermes/skills/research/onchain-smart-money-hunter/SKILL.md)
+## Phases
 
-## 3本柱
+- **Phase 1** Hyperliquid perp wallet discovery
+- **Phase 2** DeFi yield discovery with DefiLlama
+- **Phase 3** Emerging-chain and DEX wallet discovery
 
-- **Phase 1** Hyperliquid Perp 勝ちウォレット探索 ← **実装中**
-- **Phase 2** DeFi利回り探索 (DefiLlama + Dune/Flipside)
-- **Phase 3** 草コイン/DEX上手いウォレット探索 (Solana/Base)
+## Outputs
 
-## 成果物
+- `reports/hyperliquid_top_wallets_daily.md` - daily Hyperliquid wallet report
+- `reports/hyperliquid_wallet_profiles.csv` - scored wallet profiles
+- `reports/defi_yield_watchlist.md` - DeFi yield candidates
+- `reports/discovery_report.md` - event-driven wallet discovery report
+- `reports/copyability_backtest.md` - copyability validation
 
-- `reports/hyperliquid_top_wallets_daily.md` — 日次トップウォレットレポート
-- `reports/hyperliquid_wallet_profiles.csv` — 全ウォレット一覧
-- `reports/defi_yield_watchlist.md` — 利回り候補
-- `reports/dex_smart_wallets.md` — DEXウォレット候補
-- `reports/copyability_backtest.md` — 後追い可能性検証
-
-## セットアップ
+## Setup
 
 ```bash
 cp .env.example .env
-# .env にAPIキーを記入
 pip install -r requirements.txt
 ```
 
-## config
+Install Playwright's browser runtime when collecting the Hyperliquid leaderboard:
 
-`config.yaml` で全設定を管理。
+```bash
+python -m playwright install chromium
+```
+
+## Run
+
+```bash
+python -m scripts.run_daily
+python -m scripts.run_daily --dry-run
+```
+
+## Config
+
+Use `config.yaml` to control collection surfaces, thresholds, output paths, and notifications.

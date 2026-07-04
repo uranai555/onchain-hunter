@@ -19,29 +19,70 @@ class TestMergeEvents:
         assert result.empty
 
     def test_no_merge_needed(self):
-        df = pd.DataFrame([
-            {"event_type": "sharp_drop", "event_time": "2024-01-01T00:00:00+00:00", "symbol": "BTC", "price_change_pct": -6.0},
-            {"event_type": "sharp_drop", "event_time": "2024-01-02T00:00:00+00:00", "symbol": "BTC", "price_change_pct": -7.0},
-        ])
+        df = pd.DataFrame(
+            [
+                {
+                    "event_type": "sharp_drop",
+                    "event_time": "2024-01-01T00:00:00+00:00",
+                    "symbol": "BTC",
+                    "price_change_pct": -6.0,
+                },
+                {
+                    "event_type": "sharp_drop",
+                    "event_time": "2024-01-02T00:00:00+00:00",
+                    "symbol": "BTC",
+                    "price_change_pct": -7.0,
+                },
+            ]
+        )
         result = _merge_events(df)
         assert len(result) == 2
 
     def test_merge_close_events(self):
-        df = pd.DataFrame([
-            {"event_type": "sharp_drop", "event_time": "2024-01-01T00:00:00+00:00", "symbol": "BTC", "price_change_pct": -6.0},
-            {"event_type": "sharp_drop", "event_time": "2024-01-01T03:00:00+00:00", "symbol": "BTC", "price_change_pct": -8.0},
-            {"event_type": "sharp_drop", "event_time": "2024-01-01T05:00:00+00:00", "symbol": "BTC", "price_change_pct": -5.5},
-        ])
+        df = pd.DataFrame(
+            [
+                {
+                    "event_type": "sharp_drop",
+                    "event_time": "2024-01-01T00:00:00+00:00",
+                    "symbol": "BTC",
+                    "price_change_pct": -6.0,
+                },
+                {
+                    "event_type": "sharp_drop",
+                    "event_time": "2024-01-01T03:00:00+00:00",
+                    "symbol": "BTC",
+                    "price_change_pct": -8.0,
+                },
+                {
+                    "event_type": "sharp_drop",
+                    "event_time": "2024-01-01T05:00:00+00:00",
+                    "symbol": "BTC",
+                    "price_change_pct": -5.5,
+                },
+            ]
+        )
         result = _merge_events(df)
         # Should merge into 1 event (all within 6h window), keep the -8.0 one
         assert len(result) == 1
         assert result.iloc[0]["price_change_pct"] == -8.0
 
     def test_different_symbols_not_merged(self):
-        df = pd.DataFrame([
-            {"event_type": "sharp_drop", "event_time": "2024-01-01T00:00:00+00:00", "symbol": "BTC", "price_change_pct": -6.0},
-            {"event_type": "sharp_drop", "event_time": "2024-01-01T01:00:00+00:00", "symbol": "ETH", "price_change_pct": -7.0},
-        ])
+        df = pd.DataFrame(
+            [
+                {
+                    "event_type": "sharp_drop",
+                    "event_time": "2024-01-01T00:00:00+00:00",
+                    "symbol": "BTC",
+                    "price_change_pct": -6.0,
+                },
+                {
+                    "event_type": "sharp_drop",
+                    "event_time": "2024-01-01T01:00:00+00:00",
+                    "symbol": "ETH",
+                    "price_change_pct": -7.0,
+                },
+            ]
+        )
         result = _merge_events(df)
         assert len(result) == 2
 
@@ -81,6 +122,49 @@ class TestScoreWalletForEvent:
         drop_result = score_wallet_for_event(fills, event_time, "drop")
         # Pre-positioning should be better for rise since they were buying
         assert rise_result["pre_positioning_score"] >= drop_result["pre_positioning_score"]
+
+    def test_symbol_filter_ignores_other_markets(self):
+        event_time = pd.Timestamp("2024-01-01T12:00:00+00:00")
+        base_ms = int(event_time.timestamp() * 1000)
+        fills = [
+            {"time": base_ms - 3600000, "closedPnl": 100, "side": "Buy", "coin": "ETH"},
+            {"time": base_ms + 3600000, "closedPnl": 200, "side": "Sell", "coin": "ETH"},
+        ]
+        result = score_wallet_for_event(fills, event_time, "rise", symbol="BTC")
+        assert result["trade_count_in_window"] == 0
+        assert result["event_winner_score"] == 0.0
+
+    def test_position_direction_alignment_uses_fill_dir(self):
+        event_time = pd.Timestamp("2024-01-01T12:00:00+00:00")
+        base_ms = int(event_time.timestamp() * 1000)
+        long_before_rise = [
+            {"time": base_ms - 3600000, "closedPnl": 0, "side": "Buy", "dir": "Open Long", "sz": 1, "coin": "BTC"},
+            {"time": base_ms + 3600000, "closedPnl": 100, "side": "Sell", "dir": "Close Long", "sz": 1, "coin": "BTC"},
+        ]
+        short_before_rise = [
+            {"time": base_ms - 3600000, "closedPnl": 0, "side": "Sell", "dir": "Open Short", "sz": 1, "coin": "BTC"},
+            {"time": base_ms + 3600000, "closedPnl": -100, "side": "Buy", "dir": "Close Short", "sz": 1, "coin": "BTC"},
+        ]
+        aligned = score_wallet_for_event(long_before_rise, event_time, "rise", symbol="BTC")
+        misaligned = score_wallet_for_event(short_before_rise, event_time, "rise", symbol="BTC")
+        assert aligned["direction_alignment_score"] > misaligned["direction_alignment_score"]
+        assert aligned["event_winner_score"] > misaligned["event_winner_score"]
+
+    def test_timezone_aware_datetime_fill(self):
+        event_time = pd.Timestamp("2024-01-01T12:00:00+00:00")
+        fills = [
+            {
+                "datetime": pd.Timestamp("2024-01-01T11:00:00+00:00"),
+                "closedPnl": 50,
+                "side": "Buy",
+                "dir": "Open Long",
+                "sz": 1,
+                "coin": "BTC",
+            }
+        ]
+        result = score_wallet_for_event(fills, event_time, "rise", symbol="BTC")
+        assert result["trade_count_in_window"] == 1
+        assert result["direction_alignment_score"] == 100.0
 
 
 class TestDetectEvents:
