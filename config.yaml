@@ -6,6 +6,7 @@ run:
 hyperliquid:
   enabled: true
   min_trades: 30
+  cache_ttl_hours: 0      # 0 = always re-fetch; set to e.g. 12 to skip if cache is recent
   lookback_days: 90
   candidate_wallets_file: data/candidate_hyperliquid_wallets.csv
   leaderboard_collection:
@@ -87,3 +88,9 @@ reports:
   defi_yield_watchlist: true
   dex_smart_wallets: true
   copyability_backtest: true
+
+notification:
+  enabled: false
+  webhook_url: ""        # Discord or Slack webhook URL
+  on_completion: true
+  on_error: true

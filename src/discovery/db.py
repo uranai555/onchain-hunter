@@ -94,8 +94,13 @@ def upsert_candidate(
     source_confidence: str = "low",
     raw_score: float = 0.0,
     notes: str | None = None,
+    *,
+    auto_commit: bool = True,
 ) -> bool:
-    """Insert or update a wallet candidate. Returns True if new, False if updated."""
+    """Insert or update a wallet candidate. Returns True if new, False if updated.
+
+    Set auto_commit=False for batch operations and call conn.commit() yourself.
+    """
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     cur = conn.execute(
         """SELECT id, first_seen_at FROM wallet_candidates
@@ -121,7 +126,8 @@ def upsert_candidate(
              notes, notes,
              existing["id"]),
         )
-        conn.commit()
+        if auto_commit:
+            conn.commit()
         return False
     conn.execute(
         """INSERT INTO wallet_candidates
@@ -131,7 +137,8 @@ def upsert_candidate(
         (wallet_address, chain, source_surface, discovery_reason,
          now, now, source_confidence, raw_score, notes),
     )
-    conn.commit()
+    if auto_commit:
+        conn.commit()
     return True
 
 
@@ -159,7 +166,7 @@ def get_candidates(
     df = pd.read_sql_query(
         f"SELECT * FROM wallet_candidates {where} ORDER BY raw_score DESC LIMIT ?",
         conn,
-        params=params + [limit],
+        params=[*params, limit],
     )
     return df
 
@@ -196,11 +203,14 @@ def record_event(
     price_after: float | None = None,
     price_change_pct: float | None = None,
     description: str | None = None,
+    *,
+    auto_commit: bool = True,
 ) -> int:
     """Insert or update a discovery event. Returns the (stable) event id.
 
     Deduplicates on (event_type, event_time, symbol) so repeated daily runs over
     the same lookback window reuse the existing row instead of creating a new one.
+    Set auto_commit=False for batch operations and call conn.commit() yourself.
     """
     existing = conn.execute(
         """SELECT id FROM discovery_events
@@ -216,7 +226,8 @@ def record_event(
             (price_before, price_after, price_change_pct, description,
              existing["id"]),
         )
-        conn.commit()
+        if auto_commit:
+            conn.commit()
         return existing["id"]
     cur = conn.execute(
         """INSERT INTO discovery_events
@@ -226,7 +237,8 @@ def record_event(
         (event_type, event_time, symbol, price_before, price_after,
          price_change_pct, description),
     )
-    conn.commit()
+    if auto_commit:
+        conn.commit()
     return cur.lastrowid  # type: ignore[return-value]
 
 
@@ -257,8 +269,13 @@ def record_winner(
     exit_quality: float = 0.0,
     estimated_pnl: float = 0.0,
     trade_count_in_window: int = 0,
+    *,
+    auto_commit: bool = True,
 ) -> bool:
-    """Record a wallet's event performance. Returns True if new, False if updated."""
+    """Record a wallet's event performance. Returns True if new, False if updated.
+
+    Set auto_commit=False for batch operations and call conn.commit() yourself.
+    """
     cur = conn.execute(
         "SELECT id FROM event_winners WHERE event_id = ? AND wallet_address = ?",
         (event_id, wallet_address),
@@ -276,7 +293,8 @@ def record_winner(
              estimated_pnl, trade_count_in_window,
              event_id, wallet_address),
         )
-        conn.commit()
+        if auto_commit:
+            conn.commit()
         return False
     conn.execute(
         """INSERT INTO event_winners
@@ -286,7 +304,8 @@ def record_winner(
         (event_id, wallet_address, pre_positioning_score, execution_score,
          exit_quality, estimated_pnl, trade_count_in_window),
     )
-    conn.commit()
+    if auto_commit:
+        conn.commit()
     return True
 
 
@@ -296,6 +315,7 @@ def import_from_csv(conn: sqlite3.Connection, csv_path: str | Path) -> dict[str,
     """Import existing candidate_hyperliquid_wallets.csv into SQLite.
 
     Returns counts: {imported, skipped, total}.
+    Uses a single transaction for all inserts (batch commit).
     """
     path = Path(csv_path)
     if not path.exists():
@@ -309,11 +329,21 @@ def import_from_csv(conn: sqlite3.Connection, csv_path: str | Path) -> dict[str,
     skipped = 0
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
+    # Pre-fetch existing addresses for O(1) lookup instead of per-row query
+    existing_addresses = {
+        row["wallet_address"]
+        for row in conn.execute("SELECT wallet_address FROM wallet_candidates").fetchall()
+    }
+
     for _, row in df.iterrows():
         address = str(row.get("wallet_address", "")).strip().lower()
         if not address:
             skipped += 1
             continue
+        if address in existing_addresses:
+            skipped += 1
+            continue
+
         source = str(row.get("source", "legacy_csv")).strip()
         notes = str(row.get("notes", "")).strip()
         rank = str(row.get("rank", ""))
@@ -322,14 +352,6 @@ def import_from_csv(conn: sqlite3.Connection, csv_path: str | Path) -> dict[str,
         if name and name != "nan":
             discovery_reason += f", name={name}"
 
-        cur = conn.execute(
-            "SELECT id FROM wallet_candidates WHERE wallet_address = ?",
-            (address,),
-        )
-        if cur.fetchone():
-            skipped += 1
-            continue
-
         conn.execute(
             """INSERT INTO wallet_candidates
                (wallet_address, chain, source_surface, discovery_reason,
@@ -337,6 +359,7 @@ def import_from_csv(conn: sqlite3.Connection, csv_path: str | Path) -> dict[str,
                VALUES (?, 'hyperliquid', ?, ?, ?, ?, 'medium', ?)""",
             (address, "legacy_csv", discovery_reason, now, now, notes),
         )
+        existing_addresses.add(address)
         imported += 1
 
     conn.commit()

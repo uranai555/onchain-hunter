@@ -10,7 +10,6 @@ import requests
 
 from src.utils.io import ensure_directory, load_candidate_wallets
 
-
 INFO_ENDPOINT = "https://api.hyperliquid.xyz/info"
 PAGE_LIMIT = 500
 RATE_LIMIT_DELAY = 3.5    # seconds between wallet API calls
@@ -103,21 +102,49 @@ def _fetch_with_retry(address: str, lookback_days: int) -> list[dict[str, Any]]:
     return []  # unreachable but keeps type checker happy
 
 
+def _normalise_address(value: object) -> str:
+    """Normalise a wallet address to lowercase stripped string."""
+    return str(value).strip().lower()
+
+
+def _cache_is_fresh(cache_path: Path, max_age_hours: float) -> bool:
+    """Check if a parquet cache file exists and is younger than max_age_hours."""
+    if not cache_path.exists() or max_age_hours <= 0:
+        return False
+    import os
+    age_seconds = time.time() - os.path.getmtime(cache_path)
+    return age_seconds < max_age_hours * 3600
+
+
 def fetch_all_wallets(config: dict[str, Any]) -> pd.DataFrame:
     """Fetch fills for all candidate wallets with rate-limit resilience.
 
     Checks existing parquet cache first; only fetches wallets not in cache.
     After fetching, merges with existing cache and saves back.
+
+    Config options:
+        hyperliquid.cache_ttl_hours: If set and > 0, skip re-fetch when cache
+            is younger than this value (default: 0 = always re-fetch).
     """
     hyper_cfg = config.get("hyperliquid", {})
     lookback_days = int(hyper_cfg.get("lookback_days", config.get("run", {}).get("lookback_days", 90)))
     wallets_path = hyper_cfg.get("candidate_wallets_file", "data/candidate_hyperliquid_wallets.csv")
     output_path = Path(hyper_cfg.get("fills_output_file", "data/hyperliquid_fills.parquet"))
+    cache_ttl_hours = float(hyper_cfg.get("cache_ttl_hours", 0))
 
     addresses = load_candidate_wallets(wallets_path)
     if not addresses:
         print("[hyperliquid] No candidate wallets found.")
         return pd.DataFrame()
+
+    # Cache TTL check: skip re-fetch if cache is fresh enough
+    if _cache_is_fresh(output_path, cache_ttl_hours):
+        try:
+            cached = pd.read_parquet(output_path)
+            print(f"[hyperliquid] Cache is fresh ({cache_ttl_hours}h TTL), using {len(cached)} cached fills")
+            return cached
+        except Exception:
+            print("[hyperliquid] Could not read fresh cache, re-fetching")
 
     # Load existing cache
     existing_fills = pd.DataFrame()
@@ -127,12 +154,9 @@ def fetch_all_wallets(config: dict[str, Any]) -> pd.DataFrame:
             print(f"[hyperliquid] Loaded {len(existing_fills)} existing fills from cache")
         except Exception:
             print("[hyperliquid] Could not read existing fills cache, starting fresh")
-
-    # Normalise cached addresses so we can fall back to cached data on failure.
-    normalise = lambda value: str(value).strip().lower()  # noqa: E731
     if not existing_fills.empty and "wallet_address" in existing_fills.columns:
         existing_fills = existing_fills.copy()
-        existing_fills["wallet_address"] = existing_fills["wallet_address"].map(normalise)
+        existing_fills["wallet_address"] = existing_fills["wallet_address"].map(_normalise_address)
 
     # Re-fetch every wallet each run so scores reflect the latest fills. When a
     # fetch fails (e.g. rate limiting), retain that wallet's cached fills so the
@@ -140,7 +164,7 @@ def fetch_all_wallets(config: dict[str, Any]) -> pd.DataFrame:
     new_rows: list[dict[str, Any]] = []
     refreshed_addresses: set[str] = set()
     for address in addresses:
-        norm = normalise(address)
+        norm = _normalise_address(address)
         print(f"[hyperliquid] Fetching fills for {address[:14]}.. ...")
         try:
             fills = _fetch_with_retry(address, lookback_days=lookback_days)
@@ -185,7 +209,7 @@ def fetch_all_wallets(config: dict[str, Any]) -> pd.DataFrame:
     # Deduplicate: keep latest fill per (hash, tid, oid)
     dedup_cols = [c for c in ("hash", "tid", "oid") if c in df.columns]
     if dedup_cols and not df.empty:
-        df = df.drop_duplicates(subset=dedup_cols + ["wallet_address"], keep="last").reset_index(drop=True)
+        df = df.drop_duplicates(subset=[*dedup_cols, "wallet_address"], keep="last").reset_index(drop=True)
 
     ensure_directory(output_path.parent)
     df.to_parquet(output_path, index=False)

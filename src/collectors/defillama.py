@@ -27,12 +27,13 @@ def fetch_yields(max_retries: int = 3) -> list[dict[str, Any]]:
             if not isinstance(pools, list):
                 raise ValueError(f"Unexpected DefiLlama response shape: {type(pools).__name__}")
             return pools
-        except requests.RequestException as exc:
+        except (requests.RequestException, ValueError) as exc:
             if attempt < max_retries - 1:
                 time.sleep(2 ** attempt)
                 continue
             print(f"[defillama] Failed to fetch yields after {max_retries} retries: {exc}")
             return []
+    return []  # unreachable but keeps type checker happy
 
 
 def _parse_numeric(value: object) -> float:
@@ -44,16 +45,41 @@ def _parse_numeric(value: object) -> float:
 
 
 def _safe_age_days(pool: dict[str, Any]) -> int:
-    """Estimate pool age from APY history length (rough proxy)."""
+    """Estimate pool age from APY history length (rough proxy).
+
+    DefiLlama may return timestamps as epoch seconds, epoch milliseconds,
+    or ISO-8601 date strings.  We try each format in turn.
+    """
     history = pool.get("apyHistory", [])
     if isinstance(history, list) and len(history) >= 2:
         try:
-            first = datetime.fromtimestamp(history[0], tz=timezone.utc)
-            last = datetime.fromtimestamp(history[-1], tz=timezone.utc)
-            return (last - first).days
-        except (TypeError, ValueError):
+            first_raw, last_raw = history[0], history[-1]
+            first = _parse_timestamp(first_raw)
+            last = _parse_timestamp(last_raw)
+            if first and last:
+                return max((last - first).days, 0)
+        except (TypeError, ValueError, OverflowError):
             pass
     return 0
+
+
+def _parse_timestamp(value: object) -> datetime | None:
+    """Parse a timestamp that may be seconds, milliseconds, or ISO string."""
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    if isinstance(value, (int, float)):
+        ts = float(value)
+        # Heuristic: if > 1e12, assume milliseconds
+        if ts > 1e12:
+            ts = ts / 1000.0
+        try:
+            return datetime.fromtimestamp(ts, tz=timezone.utc)
+        except (OSError, OverflowError, ValueError):
+            return None
+    return None
 
 
 def fetch_filtered_pools(config: dict[str, Any]) -> pd.DataFrame:

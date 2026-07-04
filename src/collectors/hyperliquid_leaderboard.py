@@ -137,7 +137,8 @@ def _wait_for_leaderboard(page: Page) -> None:
     page.wait_for_timeout(2_000)
 
 def _select_window(page: Page, window: str) -> None:
-    from playwright.sync_api import Error as PwError, TimeoutError as PwTimeoutError
+    from playwright.sync_api import Error as PwError
+    from playwright.sync_api import TimeoutError as PwTimeoutError
     label = WINDOW_LABELS[window]
 
     # If already on the default window (30D), no action needed
@@ -405,7 +406,7 @@ def fetch_leaderboard_wallets(window: str = "30d", max_rank: int = 200) -> list[
 
             collected.sort(key=lambda row: row["rank"])
             return collected
-        except Exception as exc:  # noqa: BLE001 - keep retry boundary broad for browser automation.
+        except Exception as exc:
             last_error = exc
             print(f"[leaderboard] Attempt {attempt}/3 failed for {normalised_window}: {exc}")
             time.sleep(2 * attempt)

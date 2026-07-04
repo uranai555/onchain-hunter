@@ -41,7 +41,7 @@ def generate_discovery_report(
     events_with_winners = len(winners)
 
     lines: list[str] = [
-        f"# オンチェーンウォレット発見レポート",
+        "# オンチェーンウォレット発見レポート",
         "",
         f"**生成時刻**: {now}",
         f"**既存候補数**: {existing_wallet_count}",
@@ -68,8 +68,8 @@ def generate_discovery_report(
             "---",
             "## 新規候補ウォレット",
             "",
-            f"| アドレス | 発見面 | 理由 | 信頼度 | スコア |",
-            f"|---------|--------|------|--------|-------|",
+            "| アドレス | 発見面 | 理由 | 信頼度 | スコア |",
+            "|---------|--------|------|--------|-------|",
         ])
         for _, row in new_candidates.iterrows():
             addr = str(row.get("wallet_address", ""))[:14] + "..."
@@ -86,8 +86,8 @@ def generate_discovery_report(
             "---",
             "## 検出イベント",
             "",
-            f"| 時刻 (UTC) | 銘柄 | 種別 | 変動率 | 説明 |",
-            f"|-----------|------|------|--------|------|",
+            "| 時刻 (UTC) | 銘柄 | 種別 | 変動率 | 説明 |",
+            "|-----------|------|------|--------|------|",
         ])
         for ev in sorted(events, key=lambda e: e.get("event_time", ""), reverse=True)[:20]:
             ts = str(ev.get("event_time", ""))[:19]
@@ -112,8 +112,8 @@ def generate_discovery_report(
                 "",
                 f"**該当ウォレット数**: {len(wallet_list)}",
                 "",
-                f"| アドレス | 事前ポジション | エントリー品質 | 利確品質 | 推定PnL | 取引数 |",
-                f"|---------|---------------|--------------|---------|--------|-------|",
+                "| アドレス | 事前ポジション | エントリー品質 | 利確品質 | 推定PnL | 取引数 |",
+                "|---------|---------------|--------------|---------|--------|-------|",
             ])
             for w in wallet_list[:5]:
                 addr = str(w.get("wallet_address", ""))[:14] + "..."
