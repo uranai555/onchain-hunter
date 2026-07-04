@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import datetime as dt_mod
 import sys
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
@@ -26,7 +28,16 @@ from src.scoring.filters import apply_exclusion_filters
 from src.scoring.perp_score import perp_score_v2
 from src.scoring.yield_score import score_yields
 from src.utils.io import ensure_directory, load_config, write_text
-from scripts.collect_leaderboard import collect_leaderboard_candidates
+
+
+def _fills_df_to_wallet_dict(df: pd.DataFrame) -> dict[str, list[dict[str, Any]]]:
+    """Convert a fills DataFrame into {wallet_address: [fill_dicts]} for reuse."""
+    if df is None or df.empty or "wallet_address" not in df.columns:
+        return {}
+    result: dict[str, list[dict[str, Any]]] = {}
+    for addr, group in df.groupby("wallet_address"):
+        result[str(addr)] = group.to_dict("records")
+    return result
 
 
 def main() -> None:
@@ -38,11 +49,20 @@ def main() -> None:
     leaderboard_cfg = config.get("hyperliquid", {}).get("leaderboard_collection", {})
     if leaderboard_cfg.get("enabled", False) and leaderboard_cfg.get("run_before_scoring", False):
         try:
+            from scripts.collect_leaderboard import collect_leaderboard_candidates
+
             print("[pipeline] Collecting Hyperliquid leaderboard wallets ...")
             collect_leaderboard_candidates(config)
         except Exception as exc:
             print(f"[pipeline]  Leaderboard collection failed (non-fatal): {exc}")
             print("[pipeline]  Continuing with existing candidates ...")
+
+    # ---- Phase 1: Hyperliquid fill fetch (runs first so discovery can reuse) ----
+    fills_df = pd.DataFrame()
+    if config.get("hyperliquid", {}).get("enabled", True):
+        print("[pipeline] Fetching Hyperliquid fills ...")
+        fills_df = fetch_all_wallets(config)
+        print(f"[pipeline]  {len(fills_df)} fills loaded")
 
     # ---- Discovery Phase 0: Wallet discovery (event winners, fresh traders) ----
     discovery_cfg = config.get("discovery", {})
@@ -69,11 +89,15 @@ def main() -> None:
                 symbols = event_cfg.get("symbols", ["BTC", "ETH", "SOL"])
                 lookback_days = int(event_cfg.get("lookback_days", 7))
                 thresholds = event_cfg.get("thresholds") or None
+
+                # Reuse fills already fetched by Phase 1 to avoid duplicate API calls.
+                prefetched = _fills_df_to_wallet_dict(fills_df) if not fills_df.empty else None
                 result = run_event_discovery(
                     addresses,
                     symbols=symbols,
                     days=lookback_days,
                     thresholds=thresholds,
+                    prefetched_fills=prefetched,
                 )
 
                 # Store events and winners in DB
@@ -106,7 +130,6 @@ def main() -> None:
                 from src.discovery.db import get_candidates
 
                 # Candidates added THIS run (first_seen_at == created_at ≈ today)
-                import datetime as dt_mod
                 today_str = dt_mod.datetime.now(dt_mod.timezone.utc).strftime("%Y-%m-%d")
                 new_this_run = pd.read_sql_query(
                     """SELECT * FROM wallet_candidates
@@ -139,12 +162,8 @@ def main() -> None:
     else:
         print("[pipeline] Discovery phase disabled in config.")
 
-    # ---- Phase 1: Hyperliquid ----
-    if config.get("hyperliquid", {}).get("enabled", True):
-        print("[pipeline] Fetching Hyperliquid fills ...")
-        fills_df = fetch_all_wallets(config)
-        print(f"[pipeline]  {len(fills_df)} fills loaded")
-
+    # ---- Phase 1 (continued): Hyperliquid scoring ----
+    if config.get("hyperliquid", {}).get("enabled", True) and not fills_df.empty:
         scores_df = perp_score_v2(fills_df, config)
         filtered_df = apply_exclusion_filters(scores_df, config)
 
@@ -153,6 +172,8 @@ def main() -> None:
         generate_csv(filtered_df, str(output_dir / "hyperliquid_wallet_profiles.csv"))
         filtered_df.to_parquet(output_dir / "hyperliquid_wallet_profiles.parquet", index=False)
         print(f"[pipeline] Hyperliquid report -> {output_dir / 'hyperliquid_top_wallets_daily.md'}")
+    elif config.get("hyperliquid", {}).get("enabled", True):
+        print("[pipeline] No Hyperliquid fills to score.")
     else:
         print("[pipeline] Hyperliquid phase disabled in config.")
 

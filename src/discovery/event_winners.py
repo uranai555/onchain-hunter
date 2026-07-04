@@ -353,11 +353,17 @@ def run_event_discovery(
     symbols: list[str] | None = None,
     days: int = 7,
     thresholds: dict[str, float] | None = None,
+    prefetched_fills: dict[str, list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
     """Run full event detection + winner scoring pipeline.
 
     Fetches userFills ONCE per wallet, then scores against all events.
     This avoids 429 rate limiting from per-event×per-wallet API calls.
+
+    If *prefetched_fills* is provided (wallet_address -> list of fill dicts),
+    those are used instead of calling the Hyperliquid API, eliminating
+    duplicate API calls when the pipeline already fetched fills in an
+    earlier phase.
 
     Returns a dict with:
       events_found: int
@@ -389,30 +395,35 @@ def run_event_discovery(
     if not all_events:
         return {"events_found": 0, "events": [], "winners": {}, "errors": errors}
 
-    # Phase 2: Fetch fills ONCE per wallet, with retry
-    print(f"[discovery:events] Fetching fills for {len(wallet_addresses)} wallets (one call each, {HYPERLIQUID_RATE_LIMIT_DELAY}s delay) ...")
+    # Phase 2: Use prefetched fills when available; otherwise fetch per wallet.
     wallet_fills: dict[str, list[dict[str, Any]]] = {}
-    for address in wallet_addresses:
-        for attempt in range(API_RETRIES):
-            try:
-                fills = fetch_user_fills(address, lookback_days=days)
-                wallet_fills[address] = fills
-                print(f"[discovery:events]  {address[:14]}..: {len(fills)} fills")
-                break
-            except Exception as exc:
-                status = getattr(exc, "response", None)
-                status_code = getattr(status, "status_code", 0) if status else 0
-                if status_code == 429 and attempt < API_RETRIES - 1:
-                    wait = HYPERLIQUID_RATE_LIMIT_DELAY * (attempt + 2)
-                    print(f"[discovery:events]  429 on {address[:14]}.., retrying in {wait:.0f}s ...")
-                    time.sleep(wait)
-                else:
-                    msg = f"Failed to fetch fills for {address[:14]}..: {exc}"
-                    errors.append(msg)
-                    print(f"[discovery:events]  {msg}")
-                    wallet_fills[address] = []
+    if prefetched_fills is not None:
+        print(f"[discovery:events] Using prefetched fills for {len(wallet_addresses)} wallets (skipping API calls)")
+        for address in wallet_addresses:
+            wallet_fills[address] = prefetched_fills.get(address, [])
+    else:
+        print(f"[discovery:events] Fetching fills for {len(wallet_addresses)} wallets (one call each, {HYPERLIQUID_RATE_LIMIT_DELAY}s delay) ...")
+        for address in wallet_addresses:
+            for attempt in range(API_RETRIES):
+                try:
+                    fills = fetch_user_fills(address, lookback_days=days)
+                    wallet_fills[address] = fills
+                    print(f"[discovery:events]  {address[:14]}..: {len(fills)} fills")
                     break
-        time.sleep(HYPERLIQUID_RATE_LIMIT_DELAY)
+                except Exception as exc:
+                    status = getattr(exc, "response", None)
+                    status_code = getattr(status, "status_code", 0) if status else 0
+                    if status_code == 429 and attempt < API_RETRIES - 1:
+                        wait = HYPERLIQUID_RATE_LIMIT_DELAY * (attempt + 2)
+                        print(f"[discovery:events]  429 on {address[:14]}.., retrying in {wait:.0f}s ...")
+                        time.sleep(wait)
+                    else:
+                        msg = f"Failed to fetch fills for {address[:14]}..: {exc}"
+                        errors.append(msg)
+                        print(f"[discovery:events]  {msg}")
+                        wallet_fills[address] = []
+                        break
+            time.sleep(HYPERLIQUID_RATE_LIMIT_DELAY)
 
     # Phase 3: Score each wallet against every event using pre-fetched fills
     print(f"[discovery:events] Scoring {len(wallet_addresses)} wallets across {len(all_events)} deduplicated events ...")
