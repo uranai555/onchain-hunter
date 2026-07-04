@@ -5,7 +5,10 @@ import shutil
 import time
 from typing import Any
 
-from playwright.sync_api import Browser, Error, Locator, Page, TimeoutError, sync_playwright
+try:
+    from playwright.sync_api import Browser, Error, Locator, Page, TimeoutError, sync_playwright
+except ImportError:  # playwright is optional; scraper functions raise at call time
+    Browser = Error = Locator = Page = TimeoutError = sync_playwright = None  # type: ignore[assignment,misc]
 
 
 LEADERBOARD_URL = "https://app.hyperliquid.xyz/leaderboard"
@@ -100,7 +103,12 @@ def _parse_row_text(text: str, window: str) -> dict[str, Any] | None:
     }
 
 
-def _open_browser() -> tuple[Any, Browser]:
+def _open_browser() -> tuple[Any, Browser]:  # type: ignore[type-arg]
+    if sync_playwright is None:
+        raise ImportError(
+            "playwright is required for leaderboard scraping. "
+            "Install it with: pip install playwright && playwright install chromium"
+        )
     playwright = sync_playwright().start()
     try:
         browser = playwright.chromium.launch(headless=True, args=BROWSER_ARGS)
