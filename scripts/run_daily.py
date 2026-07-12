@@ -188,7 +188,7 @@ def main(dry_run: bool = False) -> None:
 
     # ---- Phase 1 (continued): Hyperliquid scoring ----
     if config.get("hyperliquid", {}).get("enabled", True) and not fills_df.empty:
-        scores_df = perp_score_v2(fills_df, config)
+        scores_df = perp_score_v2(fills_df, pipeline_cfg)
         filtered_df = apply_exclusion_filters(scores_df, config)
 
         report = generate_daily_report(filtered_df, config)
