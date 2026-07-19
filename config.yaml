@@ -81,6 +81,26 @@ scoring:
   strategy_complexity_enabled: true
   cross_pool_exposure_enabled: true
   crowding_penalty_enabled: true
+  thresholds:
+    realized_pnl_high: 50000
+    risk_adjusted_return_high: 5
+    notional_median_low: 100000
+    notional_median_high: 2000000
+    lot_cv_target: 1.0
+    lot_cv_penalty_coefficient: 35
+    return_skew_penalty_coefficient: 15
+    max_trade_profit_penalty_coefficient: 35
+    interval_cv_target: 1.0
+    interval_cv_penalty_coefficient: 30
+    notional_p95_low: 250000
+    notional_p95_high: 5000000
+    max_trade_profit_share_exclusion: 0.5
+    max_coin_profit_share_exclusion: 0.6
+    min_profit_factor: 1.2
+    unrealized_loss_to_profit_exclusion: 0.5
+    rank_a_min: 80
+    rank_b_min: 65
+    rank_c_min: 50
 
 reports:
   hyperliquid_top_wallets_daily: true

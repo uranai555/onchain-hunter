@@ -118,6 +118,28 @@ class RunConfig:
 
 
 @dataclass
+class ScoringConfig:
+    gaming_resistance_enabled: bool = True
+    strategy_complexity_enabled: bool = True
+    cross_pool_exposure_enabled: bool = True
+    crowding_penalty_enabled: bool = True
+    thresholds: dict[str, float] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ScoringConfig:
+        return cls(
+            gaming_resistance_enabled=bool(data.get("gaming_resistance_enabled", True)),
+            strategy_complexity_enabled=bool(data.get("strategy_complexity_enabled", True)),
+            cross_pool_exposure_enabled=bool(data.get("cross_pool_exposure_enabled", True)),
+            crowding_penalty_enabled=bool(data.get("crowding_penalty_enabled", True)),
+            thresholds={
+                str(name): float(value)
+                for name, value in data.get("thresholds", {}).items()
+            },
+        )
+
+
+@dataclass
 class NotificationConfig:
     """Webhook notification settings (optional)."""
     enabled: bool = False
@@ -143,6 +165,7 @@ class PipelineConfig:
     leaderboard: LeaderboardConfig = field(default_factory=LeaderboardConfig)
     yield_: YieldConfig = field(default_factory=YieldConfig)
     discovery: DiscoveryConfig = field(default_factory=DiscoveryConfig)
+    scoring: ScoringConfig = field(default_factory=ScoringConfig)
     notification: NotificationConfig = field(default_factory=NotificationConfig)
 
     # Keep raw dict for backward compatibility with code that reads config["..."]
@@ -158,6 +181,7 @@ class PipelineConfig:
             leaderboard=LeaderboardConfig.from_dict(hyper_raw.get("leaderboard_collection", {})),
             yield_=YieldConfig.from_dict(data.get("yield", {})),
             discovery=DiscoveryConfig.from_dict(data.get("discovery", {})),
+            scoring=ScoringConfig.from_dict(data.get("scoring", {})),
             notification=NotificationConfig.from_dict(data.get("notification", {})),
             _raw=data,
         )
