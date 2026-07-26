@@ -31,6 +31,12 @@ RANK_A_MIN = 80
 RANK_B_MIN = 65
 RANK_C_MIN = 50
 
+# 未実現損失による除外を有効にするか (機能フラグ)。
+# userFills レスポンスには通常 unrealizedPnl が含まれず、この除外条件は
+# 事実上機能しないため、デフォルトは False (無効) とする。
+# unrealizedPnl を取得できる環境でのみ True にすること。
+ENABLE_UNREALIZED_LOSS_EXCLUSION = False
+
 
 @dataclass(frozen=True)
 class ScoreThresholds:
@@ -399,7 +405,8 @@ def _exclusion_reasons(
     if metrics.pnl_30d > 0 and (metrics.pnl_90d < 0 or metrics.pnl_180d < 0):
         reasons.append("直近だけ好調")
     if (
-        metrics.realized_pnl > 0
+        ENABLE_UNREALIZED_LOSS_EXCLUSION
+        and metrics.realized_pnl > 0
         and metrics.unrealized_loss_to_profit >= thresholds.unrealized_loss_to_profit_exclusion
     ):
         reasons.append("未実現損失過大")

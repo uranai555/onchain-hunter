@@ -44,6 +44,17 @@ HYPERLIQUID_RATE_LIMIT_DELAY = 3.5  # seconds between API calls (Hyperliquid is 
 API_RETRIES = 3
 COINGECKO_DELAY = 1.0  # seconds between CoinGecko API calls (free tier: 1 req/s)
 
+# ── 利食い品質 (exit_quality) スコアの調整パラメータ ──────────────
+# exit_quality は「ピーク時の含み益をどれだけ確定利益として残せたか」を 0〜100 で表す。
+# EXIT_QUALITY_MAX: スコアの上限値 (%)。total_pnl/peak_pnl を 100 倍した値をこの値で頭打ちにする。
+EXIT_QUALITY_MAX = 100.0
+# EXIT_QUALITY_MIN: スコアの下限値 (%)。負の比率になっても最低このスコアで下限を切る。
+EXIT_QUALITY_MIN = 0.0
+# EXIT_QUALITY_POSITIVE_NO_PEAK: peak_pnl が取得できない (0以下) が総PnLがプラスのときの代替スコア。
+EXIT_QUALITY_POSITIVE_NO_PEAK = 50.0
+# EXIT_QUALITY_NEGATIVE_NO_PEAK: peak_pnl が取得できず、かつ総PnLがマイナス/ゼロのときの代替スコア。
+EXIT_QUALITY_NEGATIVE_NO_PEAK = 10.0
+
 # In-memory cache for CoinGecko price data (avoid re-fetching same coin+days within a run)
 _coingecko_cache: dict[str, pd.DataFrame] = {}
 
@@ -334,7 +345,11 @@ def score_wallet_for_event(
     # Exit quality
     total_pnl = float(pnl_series.sum())
     peak_pnl = float(pnl_series.cumsum().max())
-    exit_quality = max(0.0, min(100.0, (total_pnl / peak_pnl) * 100)) if peak_pnl > 0 else (50.0 if total_pnl > 0 else 10.0)
+    exit_quality = (
+        max(EXIT_QUALITY_MIN, min(EXIT_QUALITY_MAX, (total_pnl / peak_pnl) * 100))
+        if peak_pnl > 0
+        else (EXIT_QUALITY_POSITIVE_NO_PEAK if total_pnl > 0 else EXIT_QUALITY_NEGATIVE_NO_PEAK)
+    )
 
     return {
         "pre_positioning_score": round(pre_positioning_score, 1),
