@@ -14,8 +14,12 @@ from src.utils.logger import get_logger
 
 INFO_ENDPOINT = "https://api.hyperliquid.xyz/info"
 PAGE_LIMIT = 500
-RATE_LIMIT_DELAY = 3.5    # seconds between wallet API calls
-MAX_RETRIES = 3
+# ウォレットごとのAPI呼び出し間隔 (秒)。短くすると高速だが 429 (レート制限) リスク増。
+# 環境変数 HL_RATE_LIMIT_DELAY で上書き可能。
+RATE_LIMIT_DELAY = float(os.getenv("HL_RATE_LIMIT_DELAY", "3.5"))
+# API 呼び出し失敗時の最大リトライ回数 (回)。増やすと粘り強くなるが遅延・負荷増。
+# 環境変数 HL_MAX_RETRIES で上書き可能。
+MAX_RETRIES = int(os.getenv("HL_MAX_RETRIES", "3"))
 
 logger = get_logger("hyperliquid")
 
