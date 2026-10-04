@@ -59,8 +59,9 @@ def _log_account_value_filter_count(config: dict[str, Any]) -> None:
         logger.info("Account value filter: account_value_usd metadata unavailable")
         return
 
-    min_val = float(hyper_cfg.get("min_account_value_usd", 1000))
-    max_val = float(hyper_cfg.get("max_account_value_usd", 250000))
+    lb_cfg = hyper_cfg.get("leaderboard_collection", {})
+    min_val = float(lb_cfg.get("min_account_value_usd", hyper_cfg.get("min_account_value_usd", 1000)))
+    max_val = float(lb_cfg.get("max_account_value_usd", hyper_cfg.get("max_account_value_usd", 250000)))
     account_values = pd.to_numeric(wallets_df["account_value_usd"], errors="coerce")
     passed = int(((account_values >= min_val) & (account_values <= max_val)).sum())
     logger.info(
@@ -270,8 +271,8 @@ def main(dry_run: bool = False) -> None:
             fetch_trending_on_chain,
             save_tokens,
         )
-        from src.scoring.token_score import score_token_discovery_df
         from src.reports.markdown import generate_dex_report
+        from src.scoring.token_score import score_token_discovery_df
 
         # Collect trending tokens on configured chains
         trending_frames: list[pd.DataFrame] = []
@@ -312,12 +313,12 @@ def main(dry_run: bool = False) -> None:
 
     # ---- Integration: Cross-phase wallet linking ----
     if config.get("yield", {}).get("enabled", True) or config.get("hyperliquid", {}).get("enabled", True):
+        from src.reports.markdown import generate_integration_report
         from src.scoring.integration import (
             cross_reference_wallets,
             detect_capital_rotation,
             smart_money_score,
         )
-        from src.reports.markdown import generate_integration_report
 
         hl_path = Path(pipeline_cfg.hyperliquid.fills_output_file.replace(".parquet", "_profiles.parquet"))
         hl_df = pd.read_parquet(hl_path) if hl_path.exists() else pd.DataFrame()

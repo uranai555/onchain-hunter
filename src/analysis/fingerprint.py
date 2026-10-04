@@ -273,7 +273,7 @@ def extract_performance(fills: pd.DataFrame) -> dict[str, Any]:
 
     return {
         "total_pnl": _round(float(pnl.sum()), 6),
-        "total_trades": int(len(df)),
+        "total_trades": len(df),
         "win_rate": _safe_float((pnl > 0).mean()),
         "avg_win": _round(float(wins.mean()) if not wins.empty else 0.0, 6),
         "avg_loss": _round(float(losses.mean()) if not losses.empty else 0.0, 6),

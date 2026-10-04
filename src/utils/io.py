@@ -27,8 +27,13 @@ def load_candidate_wallets(path: str) -> pd.DataFrame:
     if not csv_path.exists():
         return pd.DataFrame(columns=["wallet_address"])
     df = pd.read_csv(csv_path)
-    if df.empty or "wallet_address" not in df.columns:
+    if df.empty:
         return pd.DataFrame(columns=["wallet_address"])
+    if "wallet_address" not in df.columns:
+        for column in ("address", "wallet"):
+            if column in df.columns:
+                return df.rename(columns={column: "wallet_address"})
+        return df.rename(columns={df.columns[0]: "wallet_address"})
     return df
 
 

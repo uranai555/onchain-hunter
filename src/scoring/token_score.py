@@ -7,7 +7,6 @@ known. Wallet extraction follows in a downstream step.
 
 from __future__ import annotations
 
-import math
 from typing import Any
 
 import pandas as pd

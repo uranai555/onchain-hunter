@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import yaml
-
 import pandas as pd
+import yaml
 
 from src.analysis.fingerprint import (
     extract_bot_indicators,

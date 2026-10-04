@@ -137,8 +137,9 @@ def fetch_all_wallets(config: dict[str, Any]) -> pd.DataFrame:
     wallets_df = load_candidate_wallets(wallets_path)
     if isinstance(wallets_df, pd.DataFrame) and not wallets_df.empty:
         if "account_value_usd" in wallets_df.columns:
-            min_val = float(hyper_cfg.get("min_account_value_usd", 1000))
-            max_val = float(hyper_cfg.get("max_account_value_usd", 250000))
+            lb_cfg = hyper_cfg.get("leaderboard_collection", {})
+            min_val = float(lb_cfg.get("min_account_value_usd", hyper_cfg.get("min_account_value_usd", 1000)))
+            max_val = float(lb_cfg.get("max_account_value_usd", hyper_cfg.get("max_account_value_usd", 250000)))
             account_values = pd.to_numeric(wallets_df["account_value_usd"], errors="coerce")
             wallets_df = wallets_df[
                 (account_values >= min_val) &
