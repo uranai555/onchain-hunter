@@ -1,0 +1,72 @@
+wallet: '0xb83de012dba672c76a7dbbbf3e459cb59d7d6e36'
+fingerprint_version: 1
+generated_at: '2026-07-04T14:45:05Z'
+time_patterns:
+  session_bias: european
+  hour_entropy: 0.6229
+  peak_hours:
+  - 12
+  - 13
+  - 21
+  weekday_concentration: 0.9225
+  night_trading_ratio: 0.0775
+coin_profile:
+  primary_coins:
+  - xyz:GOLD
+  coin_count: 1
+  top3_concentration: 1.0
+  rotation_score: 0.0
+  stablecoin_pairs_ratio: 0.0
+  synthetic_assets_ratio: 1.0
+position_sizing:
+  sizing_style: scaling
+  avg_position_usd: 1242.23
+  position_std_pct: 1.1631
+  max_position_usd: 5004.23
+  scaling_in_ratio: 0.987
+  scaling_out_ratio: 0.0
+  risk_per_trade_pct: 0.0
+direction_bias:
+  net_direction: short_biased
+  long_ratio: 0.0
+  short_ratio: 1.0
+  directional_consistency: 1.0
+entry_exit:
+  market_order_ratio: 1.0
+  entry_spread_cost_bps: 4.9
+  avg_hold_ms: 41907399.0
+  hold_std_ms: 0.0
+  quick_trade_ratio: 0.0
+  overnight_ratio: 1.0
+performance:
+  total_pnl: 0.0
+  total_trades: 2000
+  win_rate: 0.0
+  avg_win: 0.0
+  avg_loss: 0.0
+  profit_factor: 0.0
+  sharpe_approx: 0.0
+  max_drawdown: 0.0
+  best_coin: xyz:GOLD
+  worst_coin: xyz:GOLD
+  pnl_by_session:
+    asian: 0.0
+    european: 0.0
+    us: 0.0
+risk_management:
+  stop_loss_style: tight
+  estimated_stop_pct: 0.0
+  max_adverse_excursion_pct: 0.9424
+  position_size_vs_pnl_corr: 0.0
+  liquidation_count: 0
+event_response:
+  pre_event_positioning_score: 0
+  event_reaction_delay_ms: 0
+  event_win_rate: 0.0
+bot_indicators:
+  automation_likelihood: 0.6383
+  sub_second_trades_ratio: 0.9445
+  same_second_multiple_ratio: 0.9445
+  round_lot_bias: 0.0115
+  regular_interval_score: 0.8461
+  hour_synced_pattern: false

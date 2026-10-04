@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -150,3 +151,63 @@ def generate_csv(wallets_df: pd.DataFrame, path: str) -> None:
     output_path = Path(path)
     ensure_directory(output_path.parent)
     wallets_df.to_csv(output_path, index=False)
+
+
+def generate_dex_report(
+    trending_df: pd.DataFrame,
+    newly_created_df: pd.DataFrame,
+    top_n: int = 20,
+) -> str:
+    """Generate DEX token discovery report in Markdown."""
+    lines = [
+        "# DEX トークン発見レポート",
+        "",
+        f"**生成時刻**: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
+        "",
+    ]
+
+    # ── Trending tokens section ──
+    if not trending_df.empty:
+        sorted_t = trending_df.sort_values("pump_score", ascending=False).head(top_n)
+        lines += [
+            f"## 急騰トークン（Top {top_n}）",
+            "",
+            "| スコア | トークン | チェーン | 価格USD | 流動性 | 出来高24h | 年齢(h) |",
+            "|---|---|---|---|---|---|---|",
+        ]
+        for _, row in sorted_t.iterrows():
+            sym = row.get("base_token_symbol", row.get("base_token_name", "-"))
+            chain = row.get("chain", "-")
+            score = _fmt_number(row.get("pump_score"))
+            price = _fmt_number(row.get("price_usd"), 4)
+            liq = _fmt_number(row.get("liquidity_usd"), 0)
+            vol = _fmt_number(row.get("volume_24h_usd"), 0)
+            age = _fmt_number(row.get("age_hours"), 1)
+            lines.append(f"| {score} | {sym} | {chain} | ${price} | ${liq} | ${vol} | {age}h |")
+        lines.append("")
+    else:
+        lines += ["## 急騰トークン", "該当なし", ""]
+
+    # ── Newly created tokens ──
+    if not newly_created_df.empty:
+        sorted_n = newly_created_df.sort_values("detected_at", ascending=False).head(top_n)
+        lines += [
+            "## 新規作成トークン",
+            "",
+            "| トークンアドレス | チェーン | ソーシャル | CTO | 検出時刻 |",
+            "|---|---|---|---|---|",
+        ]
+        for _, row in sorted_n.iterrows():
+            addr = str(row.get("token_address", "-"))[:12] + "..."
+            chain = row.get("chain", "-")
+            social = "TW" if row.get("has_twitter") else ""
+            if row.get("has_website"):
+                social += " Web" if social else "Web"
+            cto = "⚠CTO" if row.get("cto") else "Safe"
+            ts = str(row.get("detected_at", ""))[11:19]  # HH:MM:SS
+            lines.append(f"| {addr} | {chain} | {social or '-'} | {cto} | {ts} |")
+        lines.append("")
+    else:
+        lines += ["## 新規作成トークン", "該当なし", ""]
+
+    return "\n".join(lines)

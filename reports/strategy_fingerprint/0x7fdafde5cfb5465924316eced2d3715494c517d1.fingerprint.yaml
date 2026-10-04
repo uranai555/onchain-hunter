@@ -1,0 +1,73 @@
+wallet: '0x7fdafde5cfb5465924316eced2d3715494c517d1'
+fingerprint_version: 1
+generated_at: '2026-07-04T14:45:05Z'
+time_patterns:
+  session_bias: asian
+  hour_entropy: 0.1524
+  peak_hours:
+  - 2
+  - 3
+  weekday_concentration: 1.0
+  night_trading_ratio: 1.0
+coin_profile:
+  primary_coins:
+  - HYPE
+  - BTC
+  - SOL
+  coin_count: 10
+  top3_concentration: 0.9007922103779196
+  rotation_score: 0.3796898449224612
+  stablecoin_pairs_ratio: 0.0
+  synthetic_assets_ratio: 0.0
+position_sizing:
+  sizing_style: martingale
+  avg_position_usd: 1317.06
+  position_std_pct: 1.9109
+  max_position_usd: 20749.9
+  scaling_in_ratio: 0.9855868222374743
+  scaling_out_ratio: 0.9474747474747475
+  risk_per_trade_pct: 1.3394
+direction_bias:
+  net_direction: neutral
+  long_ratio: 0.4817
+  short_ratio: 0.5183
+  directional_consistency: 0.8251
+entry_exit:
+  market_order_ratio: 0.0
+  entry_spread_cost_bps: -0.1706
+  avg_hold_ms: 2166519.33
+  hold_std_ms: 1465668.21
+  quick_trade_ratio: 0.16666666666666666
+  overnight_ratio: 0.0
+performance:
+  total_pnl: -27415.421475
+  total_trades: 2000
+  win_rate: 0.0775
+  avg_win: 25.37534
+  avg_loss: -80.795359
+  profit_factor: 0.125466
+  sharpe_approx: -8.698088
+  max_drawdown: 27209.685771
+  best_coin: HYPE
+  worst_coin: BTC
+  pnl_by_session:
+    asian: -27415.421475
+    european: 0.0
+    us: 0.0
+risk_management:
+  stop_loss_style: none
+  estimated_stop_pct: 33.1047
+  max_adverse_excursion_pct: 3.811
+  position_size_vs_pnl_corr: -0.7771
+  liquidation_count: 0
+event_response:
+  pre_event_positioning_score: 0
+  event_reaction_delay_ms: 0
+  event_win_rate: 0.0
+bot_indicators:
+  automation_likelihood: 0.51
+  sub_second_trades_ratio: 0.66
+  same_second_multiple_ratio: 0.5645
+  round_lot_bias: 0.3955
+  regular_interval_score: 0.6911
+  hour_synced_pattern: false

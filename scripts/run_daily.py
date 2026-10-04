@@ -261,6 +261,55 @@ def main(dry_run: bool = False) -> None:
             )
             logger.info("Fingerprint analysis complete for %d wallets", len(fingerprints))
 
+    # ---- Phase 3: DEX Token Discovery ----
+    dex_cfg = pipeline_cfg.dex_wallets
+    if dex_cfg.enabled:
+        logger.info("Running DEX token discovery (Phase 3) ...")
+        from src.collectors.dexscreener import (
+            fetch_latest_token_profiles_df,
+            fetch_trending_on_chain,
+            save_tokens,
+        )
+        from src.scoring.token_score import score_token_discovery_df
+        from src.reports.markdown import generate_dex_report
+
+        # Collect trending tokens on configured chains
+        trending_frames: list[pd.DataFrame] = []
+        for chain in dex_cfg.chains:
+            try:
+                chain_trending = fetch_trending_on_chain(
+                    chain=chain,
+                    min_liquidity_usd=dex_cfg.trending_min_liquidity_usd,
+                    min_volume_usd=dex_cfg.trending_min_volume_usd,
+                    max_age_hours=dex_cfg.trending_max_age_hours,
+                )
+                if not chain_trending.empty:
+                    trending_frames.append(chain_trending)
+                    logger.info("  %s: %d trending tokens", chain, len(chain_trending))
+            except Exception as exc:
+                logger.warning("  %s trending fetch failed: %s", chain, exc)
+
+        trending_df = pd.concat(trending_frames, ignore_index=True) if trending_frames else pd.DataFrame()
+
+        # Collect newly created token profiles on configured chains
+        newly_created_df = fetch_latest_token_profiles_df(
+            chain_filter={c.lower() for c in dex_cfg.chains}
+        )
+        logger.info("  New token profiles: %d", len(newly_created_df))
+
+        # Score trending tokens
+        if not trending_df.empty:
+            trending_df = score_token_discovery_df(trending_df)
+            save_tokens(trending_df, "data")
+            logger.info("  Trending tokens scored and saved.")
+
+        # Generate report
+        dex_report = generate_dex_report(trending_df, newly_created_df)
+        write_text(output_dir / "dex_token_discovery.md", dex_report)
+        logger.info("DEX discovery report -> %s", output_dir / 'dex_token_discovery.md')
+    else:
+        logger.info("DEX token discovery disabled in config.")
+
     # ---- Phase 2: DefiLlama ----
     if config.get("yield", {}).get("enabled", True):
         if dry_run:

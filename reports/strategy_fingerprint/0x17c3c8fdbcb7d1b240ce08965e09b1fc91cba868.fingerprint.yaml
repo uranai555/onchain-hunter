@@ -1,0 +1,74 @@
+wallet: '0x17c3c8fdbcb7d1b240ce08965e09b1fc91cba868'
+fingerprint_version: 1
+generated_at: '2026-07-04T14:45:05Z'
+time_patterns:
+  session_bias: us
+  hour_entropy: 0.5854
+  peak_hours:
+  - 16
+  - 17
+  - 19
+  weekday_concentration: 0.983
+  night_trading_ratio: 0.01702127659574468
+coin_profile:
+  primary_coins:
+  - NEAR
+  - xyz:BRENTOIL
+  - BTC
+  coin_count: 15
+  top3_concentration: 0.9508566888330497
+  rotation_score: 0.13706853426713356
+  stablecoin_pairs_ratio: 0.0
+  synthetic_assets_ratio: 0.2727
+position_sizing:
+  sizing_style: martingale
+  avg_position_usd: 859.28
+  position_std_pct: 3.0986
+  max_position_usd: 76113.2
+  scaling_in_ratio: 0.948936170212766
+  scaling_out_ratio: 0.9151103565365025
+  risk_per_trade_pct: 1.6587
+direction_bias:
+  net_direction: short_biased
+  long_ratio: 0.0971
+  short_ratio: 0.9029
+  directional_consistency: 0.9518
+entry_exit:
+  market_order_ratio: 0.0175
+  entry_spread_cost_bps: 0.9186
+  avg_hold_ms: 26596254.67
+  hold_std_ms: 15885296.37
+  quick_trade_ratio: 0.0
+  overnight_ratio: 0.5
+performance:
+  total_pnl: 27705.668969
+  total_trades: 2000
+  win_rate: 0.283
+  avg_win: 49.657076
+  avg_loss: -16.009448
+  profit_factor: 70.223298
+  sharpe_approx: 6.888908
+  max_drawdown: 127.388185
+  best_coin: xyz:BRENTOIL
+  worst_coin: ETH
+  pnl_by_session:
+    asian: -47.8045
+    european: 19682.008466
+    us: 8071.465003
+risk_management:
+  stop_loss_style: none
+  estimated_stop_pct: 4.2465
+  max_adverse_excursion_pct: 7.5965
+  position_size_vs_pnl_corr: 0.8939
+  liquidation_count: 1
+event_response:
+  pre_event_positioning_score: 0
+  event_reaction_delay_ms: 0
+  event_win_rate: 0.0
+bot_indicators:
+  automation_likelihood: 0.4867
+  sub_second_trades_ratio: 0.4965
+  same_second_multiple_ratio: 0.4895
+  round_lot_bias: 0.8625
+  regular_interval_score: 0.541
+  hour_synced_pattern: false

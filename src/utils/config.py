@@ -136,6 +136,28 @@ class NotificationConfig:
 
 
 @dataclass
+class DexWalletsConfig:
+    """Phase 3: DEX sh*tcoin wallet hunting configuration."""
+    enabled: bool = False
+    chains: list[str] = field(default_factory=lambda: ["Solana", "Base"])
+    trending_min_liquidity_usd: float = 1000.0
+    trending_min_volume_usd: float = 500.0
+    trending_max_age_hours: float = 72.0
+    top_n_report: int = 20
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> DexWalletsConfig:
+        return cls(
+            enabled=bool(data.get("enabled", False)),
+            chains=list(data.get("chains", cls().chains)),
+            trending_min_liquidity_usd=float(data.get("trending_min_liquidity_usd", cls.trending_min_liquidity_usd)),
+            trending_min_volume_usd=float(data.get("trending_min_volume_usd", cls.trending_min_volume_usd)),
+            trending_max_age_hours=float(data.get("trending_max_age_hours", cls.trending_max_age_hours)),
+            top_n_report=int(data.get("top_n_report", cls.top_n_report)),
+        )
+
+
+@dataclass
 class PipelineConfig:
     """Top-level validated configuration for the entire pipeline."""
     run: RunConfig = field(default_factory=RunConfig)
@@ -143,6 +165,7 @@ class PipelineConfig:
     leaderboard: LeaderboardConfig = field(default_factory=LeaderboardConfig)
     yield_: YieldConfig = field(default_factory=YieldConfig)
     discovery: DiscoveryConfig = field(default_factory=DiscoveryConfig)
+    dex_wallets: DexWalletsConfig = field(default_factory=DexWalletsConfig)
     notification: NotificationConfig = field(default_factory=NotificationConfig)
 
     # Keep raw dict for backward compatibility with code that reads config["..."]
@@ -158,6 +181,7 @@ class PipelineConfig:
             leaderboard=LeaderboardConfig.from_dict(hyper_raw.get("leaderboard_collection", {})),
             yield_=YieldConfig.from_dict(data.get("yield", {})),
             discovery=DiscoveryConfig.from_dict(data.get("discovery", {})),
+            dex_wallets=DexWalletsConfig.from_dict(data.get("dex_wallets", {})),
             notification=NotificationConfig.from_dict(data.get("notification", {})),
             _raw=data,
         )

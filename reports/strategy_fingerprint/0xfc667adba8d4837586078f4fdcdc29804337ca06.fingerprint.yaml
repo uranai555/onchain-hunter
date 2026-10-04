@@ -1,0 +1,74 @@
+wallet: '0xfc667adba8d4837586078f4fdcdc29804337ca06'
+fingerprint_version: 1
+generated_at: '2026-07-04T14:45:05Z'
+time_patterns:
+  session_bias: asian
+  hour_entropy: 0.466
+  peak_hours:
+  - 0
+  - 1
+  - 2
+  weekday_concentration: 0.7944
+  night_trading_ratio: 0.7944444444444444
+coin_profile:
+  primary_coins:
+  - BTC
+  - xyz:XYZ100
+  - xyz:SNDK
+  coin_count: 17
+  top3_concentration: 0.8577366188822422
+  rotation_score: 0.08941058941058941
+  stablecoin_pairs_ratio: 0.0
+  synthetic_assets_ratio: 0.493
+position_sizing:
+  sizing_style: martingale
+  avg_position_usd: 2661.9
+  position_std_pct: 2.5569
+  max_position_usd: 172161.0
+  scaling_in_ratio: 0.9569444444444445
+  scaling_out_ratio: 0.9797349961028838
+  risk_per_trade_pct: 1.4394
+direction_bias:
+  net_direction: short_biased
+  long_ratio: 0.0833
+  short_ratio: 0.9167
+  directional_consistency: 0.9875
+entry_exit:
+  market_order_ratio: 0.1507738392411383
+  entry_spread_cost_bps: 0.8977
+  avg_hold_ms: 1638094.0
+  hold_std_ms: 0.0
+  quick_trade_ratio: 0.0
+  overnight_ratio: 0.0
+performance:
+  total_pnl: -43511.653556
+  total_trades: 2003
+  win_rate: 0.06839740389415876
+  avg_win: 121.294914
+  avg_loss: -52.468636
+  profit_factor: 0.276362
+  sharpe_approx: -6.694132
+  max_drawdown: 59078.413899
+  best_coin: xyz:SNDK
+  worst_coin: BTC
+  pnl_by_session:
+    asian: -3447.168496
+    european: 0.0
+    us: -40064.48506
+risk_management:
+  stop_loss_style: none
+  estimated_stop_pct: 6.0886
+  max_adverse_excursion_pct: 0.8535
+  position_size_vs_pnl_corr: -0.5049
+  liquidation_count: 0
+event_response:
+  pre_event_positioning_score: 0
+  event_reaction_delay_ms: 0
+  event_win_rate: 0.0
+bot_indicators:
+  automation_likelihood: 0.5655
+  sub_second_trades_ratio: 0.8073
+  same_second_multiple_ratio: 0.8003
+  round_lot_bias: 0.0624
+  regular_interval_score: 0.7772
+  hour_synced_pattern: false

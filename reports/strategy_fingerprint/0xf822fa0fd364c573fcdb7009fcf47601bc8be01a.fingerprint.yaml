@@ -1,0 +1,74 @@
+wallet: '0xf822fa0fd364c573fcdb7009fcf47601bc8be01a'
+fingerprint_version: 1
+generated_at: '2026-07-04T14:45:06Z'
+time_patterns:
+  session_bias: european
+  hour_entropy: 0.3102
+  peak_hours:
+  - 10
+  - 11
+  - 12
+  weekday_concentration: 1.0
+  night_trading_ratio: 0.0
+coin_profile:
+  primary_coins:
+  - HYPE
+  - SOL
+  - ETH
+  coin_count: 4
+  top3_concentration: 0.9971104786638334
+  rotation_score: 0.3471735867933967
+  stablecoin_pairs_ratio: 0.0
+  synthetic_assets_ratio: 0.0
+position_sizing:
+  sizing_style: scaling
+  avg_position_usd: 865.17
+  position_std_pct: 0.8995
+  max_position_usd: 5000.0
+  scaling_in_ratio: 0.9969924812030075
+  scaling_out_ratio: 0.2
+  risk_per_trade_pct: 0.025
+direction_bias:
+  net_direction: short_biased
+  long_ratio: 0.0
+  short_ratio: 1.0
+  directional_consistency: 1.0
+entry_exit:
+  market_order_ratio: 0.0
+  entry_spread_cost_bps: 0.4044
+  avg_hold_ms: 17333419.0
+  hold_std_ms: 0.0
+  quick_trade_ratio: 0.0
+  overnight_ratio: 0.0
+performance:
+  total_pnl: -432.757237
+  total_trades: 2000
+  win_rate: 0.0
+  avg_win: 0.0
+  avg_loss: -86.551447
+  profit_factor: 0.0
+  sharpe_approx: -2.000949
+  max_drawdown: 432.757237
+  best_coin: SOL
+  worst_coin: HYPE
+  pnl_by_session:
+    asian: 0.0
+    european: -431.132349
+    us: -1.624888
+risk_management:
+  stop_loss_style: none
+  estimated_stop_pct: 13.5277
+  max_adverse_excursion_pct: 1.7821
+  position_size_vs_pnl_corr: -0.1446
+  liquidation_count: 0
+event_response:
+  pre_event_positioning_score: 0
+  event_reaction_delay_ms: 0
+  event_win_rate: 0.0
+bot_indicators:
+  automation_likelihood: 0.4298
+  sub_second_trades_ratio: 0.592
+  same_second_multiple_ratio: 0.514
+  round_lot_bias: 0.1345
+  regular_interval_score: 0.6351
+  hour_synced_pattern: false

@@ -15,6 +15,7 @@ API sources (no API key required):
 
 from __future__ import annotations
 
+import datetime as dt_mod
 import time
 from datetime import timedelta
 from typing import Any
@@ -287,6 +288,12 @@ def score_wallet_for_event(
             continue
         if isinstance(raw_ts, (int, float)):
             dt = pd.Timestamp(raw_ts, unit="ms", tz="UTC")
+        elif isinstance(raw_ts, (pd.Timestamp, dt_mod.datetime)):
+            dt = pd.Timestamp(raw_ts)
+            if dt.tz is None:
+                dt = dt.tz_localize("UTC")
+            else:
+                dt = dt.tz_convert("UTC")
         else:
             dt = pd.Timestamp(raw_ts, tz="UTC")
         if window_start <= dt <= window_end:
