@@ -310,6 +310,49 @@ def main(dry_run: bool = False) -> None:
     else:
         logger.info("DEX token discovery disabled in config.")
 
+    # ---- Integration: Cross-phase wallet linking ----
+    if config.get("yield", {}).get("enabled", True) or config.get("hyperliquid", {}).get("enabled", True):
+        from src.scoring.integration import (
+            cross_reference_wallets,
+            detect_capital_rotation,
+            smart_money_score,
+        )
+        from src.reports.markdown import generate_integration_report
+
+        hl_path = Path(pipeline_cfg.hyperliquid.fills_output_file.replace(".parquet", "_profiles.parquet"))
+        hl_df = pd.read_parquet(hl_path) if hl_path.exists() else pd.DataFrame()
+        yield_path = Path("data/defillama_yields.parquet")
+        yield_df = pd.read_parquet(yield_path) if yield_path.exists() else pd.DataFrame()
+        dex_path = Path("data/dexscreener_tokens.parquet")
+        dex_df = pd.read_parquet(dex_path) if dex_path.exists() else pd.DataFrame()
+
+        if not hl_df.empty or not yield_df.empty or not dex_df.empty:
+            logger.info("Running cross-phase integration...")
+            profiles = cross_reference_wallets(
+                hl_scores=hl_df if not hl_df.empty else None,
+                yield_scores=yield_df if not yield_df.empty else None,
+                meme_scores=dex_df if not dex_df.empty else None,
+            )
+            profile_dicts = []
+            for p in profiles:
+                sms = smart_money_score(p)
+                profile_dicts.append({
+                    "address": p.address,
+                    "phases_detected": p.phases_detected,
+                    "n_phases": len(p.phases_detected),
+                    "perp_score": p.perp_score,
+                    "yield_score": p.yield_score,
+                    "meme_score": p.meme_score,
+                    "smart_money_score": sms,
+                    "capital_rotation_signal": p.capital_rotation_signal,
+                })
+            rotation = detect_capital_rotation(profiles)
+            report = generate_integration_report(profile_dicts, rotation)
+            write_text(output_dir / "cross_phase_integration.md", report)
+            logger.info("Integration report -> %s", output_dir / 'cross_phase_integration.md')
+        else:
+            logger.info("No data available for cross-phase integration.")
+
     # ---- Phase 2: DefiLlama ----
     if config.get("yield", {}).get("enabled", True):
         if dry_run:

@@ -153,6 +153,49 @@ def generate_csv(wallets_df: pd.DataFrame, path: str) -> None:
     wallets_df.to_csv(output_path, index=False)
 
 
+def generate_integration_report(
+    profiles: list[dict[str, Any]],
+    rotation_signals: list[dict[str, Any]],
+) -> str:
+    """Generate cross-phase integration report."""
+    lines = [
+        "# クロスフェーズ統合レポート",
+        "",
+        f"**生成時刻**: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
+        f"**ウォレット数**: {len(profiles)}",
+        "",
+    ]
+    multi_phase = [p for p in profiles if p.get("n_phases", 0) >= 2]
+    if multi_phase:
+        lines += [
+            f"## マルチフェーズウォレット ({len(multi_phase)})",
+            "",
+            "| アドレス | フェーズ | スマートマネースコア | キャピタルフロー |",
+            "|---|---|---|---|",
+        ]
+        for p in sorted(multi_phase, key=lambda x: x.get("smart_money_score", 0), reverse=True)[:10]:
+            addr = str(p.get("address", "-"))[:16] + "..."
+            phases = ", ".join(p.get("phases_detected", []))
+            sms = f"{p.get('smart_money_score', 0):.1f}"
+            flow = p.get("capital_rotation_signal", "-")
+            lines.append(f"| {addr} | {phases} | {sms} | {flow} |")
+        lines.append("")
+    if rotation_signals:
+        lines += [
+            "## キャピタルローテーションシグナル",
+            "",
+            "| アドレス | パターン | スコア差 |",
+            "|---|---|---|",
+        ]
+        for s in rotation_signals[:10]:
+            addr = str(s.get("address", "-"))[:16] + "..."
+            pattern = s.get("pattern", "-")
+            gap = f"{s.get('score_gap', 0):.1f}"
+            lines.append(f"| {addr} | {pattern} | {gap} |")
+        lines.append("")
+    return "\n".join(lines)
+
+
 def generate_dex_report(
     trending_df: pd.DataFrame,
     newly_created_df: pd.DataFrame,
