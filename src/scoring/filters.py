@@ -6,7 +6,6 @@ import pandas as pd
 
 from src.scoring import perp_score
 from src.scoring.perp_score import ScoreThresholds
-from src.utils.config import PipelineConfig
 
 CEX_ADDRESS_PREFIXES = (
     "0x0000000000000000000000000000000000000000",
@@ -41,10 +40,13 @@ def apply_exclusion_filters(df_scores: pd.DataFrame, config: dict[str, Any]) -> 
     exclude_cex = bool(config.get("filters", {}).get("exclude_cex_wallets", True))
     # スコアリング側と同じ閾値設定 (scoring.thresholds) を使う。
     # 固定値で再判定すると config.yaml で緩めた閾値が日次出力に反映されない。
-    # PipelineConfig.from_dict 経由にすると、YAML の引用符付き数値 ("1.2" 等) も
-    # スコアリング側と同じく float に変換される。
+    # scoring.thresholds の値だけ float に変換するので、YAML の引用符付き数値
+    # ("1.2" 等) も扱え、無関係なセクションの不正な設定値では停止しない。
     score_thresholds = ScoreThresholds.from_dict(
-        PipelineConfig.from_dict(config).scoring.thresholds
+        {
+            name: float(value)
+            for name, value in config.get("scoring", {}).get("thresholds", {}).items()
+        }
     )
 
     # Vectorized filter checks

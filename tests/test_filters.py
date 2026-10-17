@@ -108,6 +108,17 @@ class TestApplyExclusionFilters:
         assert result.iloc[0]["excluded"]
         assert "プロフィットファクター不足" in result.iloc[0]["exclusion_reasons"]
 
+    def test_invalid_unrelated_config_ignored(self):
+        # Invalid values in unrelated sections (e.g. yield.min_apy while yield
+        # is disabled) must not abort the filter — only scoring.thresholds is read.
+        df = self._make_scores_df()
+        config = {
+            "hyperliquid": {"min_trades": 30},
+            "yield": {"enabled": False, "min_apy": "disabled"},
+        }
+        result = apply_exclusion_filters(df, config)
+        assert not result.iloc[0]["excluded"]
+
     def test_cex_wallet(self):
         df = self._make_scores_df(
             wallet_address="0x0000000000000000000000000000000000000000"

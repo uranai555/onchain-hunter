@@ -16,10 +16,14 @@ _BASE_SCORING_COMMIT = "d568648feb276de65d9c33d3ff39171988310763"
 
 
 def _deterministic_fills() -> pd.DataFrame:
-    """Fixed fills: two wallets, mixed PnL, recent timestamps inside all windows."""
-    now_ms = int(pd.Timestamp.now(tz="UTC").timestamp() * 1000)
+    """Fixed fills: two wallets, mixed PnL, fixed UTC timestamps.
+
+    Timestamps are fixed and older than the 180-day scoring window so that
+    windowed PnL (30d/90d/180d) and per-day aggregation do not depend on the
+    date the test is run.
+    """
     hour = 3_600_000
-    base = now_ms - 5 * 24 * hour
+    base = int(pd.Timestamp("2025-01-05T00:00:00Z").timestamp() * 1000)
     fills = pd.DataFrame({
         "wallet_address": ["0xabc"] * 40 + ["0xdef"] * 35,
         "closedPnl": [100.0, -30.0] * 20 + [50.0, -20.0, 80.0] * 11 + [50.0, -20.0],
