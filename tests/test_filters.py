@@ -45,6 +45,7 @@ class TestApplyExclusionFilters:
             "profit_factor": 2.0,
             "max_coin_profit_share": 0.3,
             "unrealized_loss_to_profit": 0.1,
+            "realized_pnl": 5000.0,
             "perp_score_v2": 70.0,
             "excluded": False,
             "exclusion_reasons": "",
@@ -95,6 +96,16 @@ class TestApplyExclusionFilters:
         result = apply_exclusion_filters(df, config)
         assert result.iloc[0]["excluded"]
         assert "極端なリスク行動" in result.iloc[0]["exclusion_reasons"]
+
+    def test_unrealized_loss_flag_skips_nonpositive_realized_pnl(self, monkeypatch):
+        # The scoring-side exclusion requires realized_pnl > 0; the final
+        # filter must apply the same condition when the flag is on.
+        monkeypatch.setattr(perp_score, "ENABLE_UNREALIZED_LOSS_EXCLUSION", True)
+        df = self._make_scores_df(unrealized_loss_to_profit=0.9, realized_pnl=-100.0)
+        config = {"hyperliquid": {"min_trades": 30}, "filters": {}}
+        result = apply_exclusion_filters(df, config)
+        assert not result.iloc[0]["excluded"]
+        assert "極端なリスク行動" not in result.iloc[0]["exclusion_reasons"]
 
     def test_quoted_string_thresholds(self):
         # YAML quoted values (e.g. min_profit_factor: "1.2") must be coerced

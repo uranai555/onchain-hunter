@@ -232,3 +232,39 @@ class TestPerpScoreV2:
         assert not windowed.eq(0).all().all()
         assert (actual["pnl_30d"] != actual["pnl_180d"]).any()
         assert actual["exclusion_reasons"].str.contains("直近だけ好調").any()
+
+    def test_windowed_pnl_tracks_relative_dates(self):
+        """Dynamic clock: fills dated relative to now land in the right windows.
+
+        Unlike _deterministic_fills (which pins pd.Timestamp.now), timestamps
+        here are computed from the real current time, so pnl_30d/90d/180d must
+        each pick up only the fills inside their own window.
+        """
+        from src.scoring.perp_score import perp_score_v2
+
+        now = pd.Timestamp.now(tz="UTC")
+
+        def _ms(days_ago: float) -> int:
+            return int((now - pd.Timedelta(days=days_ago)).timestamp() * 1000)
+
+        fills = pd.DataFrame({
+            "wallet_address": ["0xdyn"] * 30,
+            "closedPnl": [100.0] * 10 + [50.0] * 10 + [-20.0] * 10,
+            "px": [50_000.0] * 30,
+            "sz": [0.1] * 30,
+            "coin": ["BTC"] * 30,
+            "side": ["Buy", "Sell"] * 15,
+            "time": (
+                [_ms(5 + i * 0.1) for i in range(10)]
+                + [_ms(45 + i * 0.1) for i in range(10)]
+                + [_ms(120 + i * 0.1) for i in range(10)]
+            ),
+        })
+        fills["datetime"] = pd.to_datetime(fills["time"], unit="ms", utc=True)
+
+        result = perp_score_v2(fills, {"hyperliquid": {"min_trades": 30}})
+        row = result.iloc[0]
+        assert row["pnl_30d"] == pytest.approx(1000.0)
+        assert row["pnl_90d"] == pytest.approx(1500.0)
+        assert row["pnl_180d"] == pytest.approx(1300.0)
+        assert row["pnl_90d"] > row["pnl_180d"] > row["pnl_30d"]

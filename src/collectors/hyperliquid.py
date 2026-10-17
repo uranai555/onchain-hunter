@@ -23,10 +23,14 @@ PAGE_LIMIT = 500
 # ウォレットごとのAPI呼び出し間隔 (秒)。短くすると高速だが 429 (レート制限) リスク増。
 # 環境変数 HL_RATE_LIMIT_DELAY で上書き可能。
 RATE_LIMIT_DELAY = float(os.getenv("HL_RATE_LIMIT_DELAY", "3.5"))
-# API 呼び出し失敗時の最大リトライ回数 (回)。増やすと粘り強くなるが遅延・負荷増。
+# API 呼び出し失敗時の最大試行回数 (回、初回リクエストを含む)。増やすと粘り強くなるが遅延・負荷増。
 # 環境変数 HL_MAX_RETRIES で上書き可能。0 以下でも最低1回は取得を試行する
 # (0 のままだと取得自体がスキップされ、既存キャッシュが削除されるため)。
-MAX_RETRIES = max(1, int(os.getenv("HL_MAX_RETRIES", "3")))
+def _max_retries_from_env() -> int:
+    return max(1, int(os.getenv("HL_MAX_RETRIES", "3")))
+
+
+MAX_RETRIES = _max_retries_from_env()
 
 logger = get_logger("hyperliquid")
 
@@ -104,11 +108,13 @@ def fetch_user_fills(address: str, lookback_days: int = 90) -> list[dict[str, An
 
 def _fetch_with_retry(address: str, lookback_days: int) -> list[dict[str, Any]]:
     """Fetch fills for one wallet with retry on 429."""
-    for attempt in range(MAX_RETRIES):
+    # 初回リクエストは MAX_RETRIES が 0 以下でも必ず実行する (最低1試行)。
+    max_attempts = max(1, MAX_RETRIES)
+    for attempt in range(max_attempts):
         try:
             return fetch_user_fills(address, lookback_days=lookback_days)
         except requests.HTTPError as exc:
-            if exc.response is not None and exc.response.status_code == 429 and attempt < MAX_RETRIES - 1:
+            if exc.response is not None and exc.response.status_code == 429 and attempt < max_attempts - 1:
                 wait = RATE_LIMIT_DELAY * (attempt + 2)
                 logger.warning("429 on %s.., retrying in %.0fs ...", address[:14], wait)
                 time.sleep(wait)

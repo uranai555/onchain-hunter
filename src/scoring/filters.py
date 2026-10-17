@@ -55,6 +55,7 @@ def apply_exclusion_filters(df_scores: pd.DataFrame, config: dict[str, Any]) -> 
     max_coin_shares = pd.to_numeric(df.get("max_coin_profit_share", 0), errors="coerce").fillna(0.0)
     profit_factors = pd.to_numeric(df.get("profit_factor", 0), errors="coerce").fillna(0.0)
     unrealized_ratios = pd.to_numeric(df.get("unrealized_loss_to_profit", 0), errors="coerce").fillna(0.0)
+    realized_pnl = pd.to_numeric(df.get("realized_pnl", 0), errors="coerce").fillna(0.0)
 
     cex_mask = pd.Series(False, index=df.index)
     if exclude_cex:
@@ -63,10 +64,13 @@ def apply_exclusion_filters(df_scores: pd.DataFrame, config: dict[str, Any]) -> 
     low_trades_mask = trade_counts < min_trades
     coin_dep_mask = max_coin_shares >= score_thresholds.max_coin_profit_share_exclusion
     low_pf_mask = profit_factors < score_thresholds.min_profit_factor
-    # 未実現損失による除外はスコアリング側と同じ機能フラグでゲートする。
-    # userFills には通常 unrealizedPnl が含まれず、デフォルトでは無効。
+    # 未実現損失による除外はスコアリング側と同じ機能フラグ・条件でゲートする
+    # (実現損益がプラスのウォレットのみ対象)。userFills には通常
+    # unrealizedPnl が含まれず、デフォルトでは無効。
     if perp_score.ENABLE_UNREALIZED_LOSS_EXCLUSION:
-        risk_mask = unrealized_ratios >= score_thresholds.unrealized_loss_to_profit_exclusion
+        risk_mask = (realized_pnl > 0) & (
+            unrealized_ratios >= score_thresholds.unrealized_loss_to_profit_exclusion
+        )
     else:
         risk_mask = pd.Series(False, index=df.index)
 
