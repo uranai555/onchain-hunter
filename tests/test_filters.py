@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
+from src.scoring import perp_score
 from src.scoring.filters import _append_reason, _append_reasons, apply_exclusion_filters
 
 
@@ -78,12 +79,34 @@ class TestApplyExclusionFilters:
         assert result.iloc[0]["excluded"]
         assert "単一銘柄依存" in result.iloc[0]["exclusion_reasons"]
 
-    def test_high_unrealized_loss(self):
+    def test_high_unrealized_loss_ignored_when_flag_disabled(self):
+        # ENABLE_UNREALIZED_LOSS_EXCLUSION defaults to False, matching the
+        # scoring side where the same flag gates the exclusion reason.
+        df = self._make_scores_df(unrealized_loss_to_profit=0.6)
+        config = {"hyperliquid": {"min_trades": 30}, "filters": {}}
+        result = apply_exclusion_filters(df, config)
+        assert not result.iloc[0]["excluded"]
+        assert "極端なリスク行動" not in result.iloc[0]["exclusion_reasons"]
+
+    def test_high_unrealized_loss_when_flag_enabled(self, monkeypatch):
+        monkeypatch.setattr(perp_score, "ENABLE_UNREALIZED_LOSS_EXCLUSION", True)
         df = self._make_scores_df(unrealized_loss_to_profit=0.6)
         config = {"hyperliquid": {"min_trades": 30}, "filters": {}}
         result = apply_exclusion_filters(df, config)
         assert result.iloc[0]["excluded"]
         assert "極端なリスク行動" in result.iloc[0]["exclusion_reasons"]
+
+    def test_quoted_string_thresholds(self):
+        # YAML quoted values (e.g. min_profit_factor: "1.2") must be coerced
+        # to float like the scoring path, not compared as strings.
+        df = self._make_scores_df(profit_factor=1.0)
+        config = {
+            "hyperliquid": {"min_trades": 30},
+            "scoring": {"thresholds": {"min_profit_factor": "1.2"}},
+        }
+        result = apply_exclusion_filters(df, config)
+        assert result.iloc[0]["excluded"]
+        assert "プロフィットファクター不足" in result.iloc[0]["exclusion_reasons"]
 
     def test_cex_wallet(self):
         df = self._make_scores_df(
