@@ -8,9 +8,15 @@ from typing import Any
 
 import pandas as pd
 import requests
+from dotenv import load_dotenv
 
 from src.utils.io import ensure_directory, load_candidate_wallets
 from src.utils.logger import get_logger
+
+# README のセットアップ手順 (.env.example -> .env) で設定した
+# HL_RATE_LIMIT_DELAY / HL_MAX_RETRIES が反映されるよう、
+# モジュール定数を評価する前に .env を読み込む。
+load_dotenv()
 
 INFO_ENDPOINT = "https://api.hyperliquid.xyz/info"
 PAGE_LIMIT = 500
@@ -18,8 +24,9 @@ PAGE_LIMIT = 500
 # 環境変数 HL_RATE_LIMIT_DELAY で上書き可能。
 RATE_LIMIT_DELAY = float(os.getenv("HL_RATE_LIMIT_DELAY", "3.5"))
 # API 呼び出し失敗時の最大リトライ回数 (回)。増やすと粘り強くなるが遅延・負荷増。
-# 環境変数 HL_MAX_RETRIES で上書き可能。
-MAX_RETRIES = int(os.getenv("HL_MAX_RETRIES", "3"))
+# 環境変数 HL_MAX_RETRIES で上書き可能。0 以下でも最低1回は取得を試行する
+# (0 のままだと取得自体がスキップされ、既存キャッシュが削除されるため)。
+MAX_RETRIES = max(1, int(os.getenv("HL_MAX_RETRIES", "3")))
 
 logger = get_logger("hyperliquid")
 

@@ -4,6 +4,8 @@ from typing import Any
 
 import pandas as pd
 
+from src.scoring.perp_score import ScoreThresholds
+
 CEX_ADDRESS_PREFIXES = (
     "0x0000000000000000000000000000000000000000",
 )
@@ -35,6 +37,9 @@ def apply_exclusion_filters(df_scores: pd.DataFrame, config: dict[str, Any]) -> 
 
     min_trades = int(config.get("hyperliquid", {}).get("min_trades", 30))
     exclude_cex = bool(config.get("filters", {}).get("exclude_cex_wallets", True))
+    # スコアリング側と同じ閾値設定 (scoring.thresholds) を使う。
+    # 固定値で再判定すると config.yaml で緩めた閾値が日次出力に反映されない。
+    score_thresholds = ScoreThresholds.from_dict(config.get("scoring", {}).get("thresholds", {}))
 
     # Vectorized filter checks
     addresses = df.get("wallet_address", pd.Series("", index=df.index)).fillna("").str.lower()
@@ -48,9 +53,9 @@ def apply_exclusion_filters(df_scores: pd.DataFrame, config: dict[str, Any]) -> 
         for prefix in CEX_ADDRESS_PREFIXES:
             cex_mask |= addresses.str.startswith(prefix.lower())
     low_trades_mask = trade_counts < min_trades
-    coin_dep_mask = max_coin_shares >= 0.60
-    low_pf_mask = profit_factors < 1.20
-    risk_mask = unrealized_ratios >= 0.50
+    coin_dep_mask = max_coin_shares >= score_thresholds.max_coin_profit_share_exclusion
+    low_pf_mask = profit_factors < score_thresholds.min_profit_factor
+    risk_mask = unrealized_ratios >= score_thresholds.unrealized_loss_to_profit_exclusion
 
     # Build reason strings vectorized
     reason_parts = pd.Series("", index=df.index)
