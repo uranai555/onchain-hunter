@@ -14,24 +14,58 @@ from src.utils.scoring import clip_score, inverse_linear_score, linear_score, sa
 # Commit that contains the pre-refactor perp_score implementation (PR base).
 _BASE_SCORING_COMMIT = "d568648feb276de65d9c33d3ff39171988310763"
 
+# Fixed "as of" instant used to freeze pd.Timestamp.now inside scoring modules
+# so that the 30d/90d/180d windows are deterministic.
+_FIXED_SCORING_NOW = pd.Timestamp("2025-01-31T00:00:00Z")
+
+
+def _pin_scoring_now(monkeypatch: pytest.MonkeyPatch, module: types.ModuleType) -> None:
+    """Freeze ``pd.Timestamp.now`` inside *module* at ``_FIXED_SCORING_NOW``.
+
+    The module's ``pd`` attribute is replaced with a namespace copy so only
+    that module sees the frozen clock; ``pd.Timestamp`` cannot be patched in
+    place because it is an immutable extension type.
+    """
+    frozen = types.SimpleNamespace(**vars(pd))
+    frozen.Timestamp = types.SimpleNamespace(now=lambda tz=None: _FIXED_SCORING_NOW)
+    monkeypatch.setattr(module, "pd", frozen)
+
 
 def _deterministic_fills() -> pd.DataFrame:
     """Fixed fills: two wallets, mixed PnL, fixed UTC timestamps.
 
-    Timestamps are fixed and older than the 180-day scoring window so that
-    windowed PnL (30d/90d/180d) and per-day aggregation do not depend on the
-    date the test is run.
+    Fill times are absolute fixed values straddling the 30d/90d/180d window
+    boundaries relative to _FIXED_SCORING_NOW (plus a bucket older than every
+    window), so windowed PnL and the 直近だけ好調 exclusion are exercised.
+    Pair with _pin_scoring_now so scoring uses the same fixed "now".
     """
-    hour = 3_600_000
-    base = int(pd.Timestamp("2025-01-05T00:00:00Z").timestamp() * 1000)
+    hour_ms = 3_600_000
+    day_ms = 86_400_000
+    now_ms = int(_FIXED_SCORING_NOW.timestamp() * 1000)
+
+    def _times(days_ago: int, count: int) -> list[int]:
+        base = now_ms - days_ago * day_ms
+        return [base + i * hour_ms for i in range(count)]
+
     fills = pd.DataFrame({
         "wallet_address": ["0xabc"] * 40 + ["0xdef"] * 35,
-        "closedPnl": [100.0, -30.0] * 20 + [50.0, -20.0, 80.0] * 11 + [50.0, -20.0],
+        # 0xdef: strongly positive recent bucket over negative older buckets so
+        # pnl_30d > 0 while pnl_90d/pnl_180d < 0 (直近だけ好調 fires).
+        "closedPnl": [100.0, -30.0] * 20 + [100.0] * 9 + [-110.0] * 9 + [-80.0] * 9 + [300.0] * 8,
         "px": [50_000.0] * 40 + [3_000.0] * 35,
         "sz": [0.1, 0.2] * 20 + [1.0, 1.5] * 17 + [1.0],
         "coin": ["BTC", "ETH"] * 20 + ["SOL", "ETH"] * 17 + ["SOL"],
         "side": ["Buy", "Sell"] * 20 + ["Buy", "Sell"] * 17 + ["Buy"],
-        "time": [base + i * hour for i in range(75)],
+        "time": (
+            _times(6, 10)
+            + _times(42, 10)
+            + _times(133, 10)
+            + _times(244, 10)
+            + _times(3, 9)
+            + _times(60, 9)
+            + _times(120, 9)
+            + _times(200, 8)
+        ),
     })
     fills["datetime"] = pd.to_datetime(fills["time"], unit="ms", utc=True)
     return fills
@@ -159,9 +193,11 @@ class TestPerpScoreV2:
         assert 0 <= result.iloc[0]["perp_score_v2"] <= 100
         assert result.iloc[0]["trade_count"] == 50
 
-    def test_threshold_override_changes_scores(self):
+    def test_threshold_override_changes_scores(self, monkeypatch):
+        import src.scoring.perp_score as perp_score_module
         from src.scoring.perp_score import perp_score_v2
 
+        _pin_scoring_now(monkeypatch, perp_score_module)
         fills = _deterministic_fills()
         base = perp_score_v2(fills, {"hyperliquid": {"min_trades": 30}})
         overridden = perp_score_v2(
@@ -176,13 +212,23 @@ class TestPerpScoreV2:
             assert new_row["realized_pnl_score"] > base_row["realized_pnl_score"]
             assert new_row["perp_score_v2"] > base_row["perp_score_v2"]
 
-    def test_matches_base_implementation(self):
+    def test_matches_base_implementation(self, monkeypatch):
         """The scoring split must be output-identical to the pre-refactor code."""
+        import src.scoring.perp_score as perp_score_module
         from src.scoring.perp_score import perp_score_v2
 
         base_module = _load_base_perp_score()
+        _pin_scoring_now(monkeypatch, perp_score_module)
+        _pin_scoring_now(monkeypatch, base_module)
         fills = _deterministic_fills()
         config = {"hyperliquid": {"min_trades": 30}}
         expected = base_module.perp_score_v2(fills, config)
         actual = perp_score_v2(fills, config)
         pd.testing.assert_frame_equal(expected, actual, check_exact=True)
+
+        # Guard: fills straddle the window boundaries, so windowed PnL must be
+        # non-zero and distinct, and the 直近だけ好調 exclusion must fire.
+        windowed = actual[["pnl_30d", "pnl_90d", "pnl_180d"]]
+        assert not windowed.eq(0).all().all()
+        assert (actual["pnl_30d"] != actual["pnl_180d"]).any()
+        assert actual["exclusion_reasons"].str.contains("直近だけ好調").any()
