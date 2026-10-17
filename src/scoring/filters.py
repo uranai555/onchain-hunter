@@ -4,6 +4,9 @@ from typing import Any
 
 import pandas as pd
 
+from src.scoring import perp_score
+from src.scoring.perp_score import ScoreThresholds
+
 CEX_ADDRESS_PREFIXES = (
     "0x0000000000000000000000000000000000000000",
 )
@@ -35,6 +38,16 @@ def apply_exclusion_filters(df_scores: pd.DataFrame, config: dict[str, Any]) -> 
 
     min_trades = int(config.get("hyperliquid", {}).get("min_trades", 30))
     exclude_cex = bool(config.get("filters", {}).get("exclude_cex_wallets", True))
+    # スコアリング側と同じ閾値設定 (scoring.thresholds) を使う。
+    # 固定値で再判定すると config.yaml で緩めた閾値が日次出力に反映されない。
+    # scoring.thresholds の値だけ float に変換するので、YAML の引用符付き数値
+    # ("1.2" 等) も扱え、無関係なセクションの不正な設定値では停止しない。
+    score_thresholds = ScoreThresholds.from_dict(
+        {
+            name: float(value)
+            for name, value in config.get("scoring", {}).get("thresholds", {}).items()
+        }
+    )
 
     # Vectorized filter checks
     addresses = df.get("wallet_address", pd.Series("", index=df.index)).fillna("").str.lower()
@@ -42,15 +55,24 @@ def apply_exclusion_filters(df_scores: pd.DataFrame, config: dict[str, Any]) -> 
     max_coin_shares = pd.to_numeric(df.get("max_coin_profit_share", 0), errors="coerce").fillna(0.0)
     profit_factors = pd.to_numeric(df.get("profit_factor", 0), errors="coerce").fillna(0.0)
     unrealized_ratios = pd.to_numeric(df.get("unrealized_loss_to_profit", 0), errors="coerce").fillna(0.0)
+    realized_pnl = pd.to_numeric(df.get("realized_pnl", 0), errors="coerce").fillna(0.0)
 
     cex_mask = pd.Series(False, index=df.index)
     if exclude_cex:
         for prefix in CEX_ADDRESS_PREFIXES:
             cex_mask |= addresses.str.startswith(prefix.lower())
     low_trades_mask = trade_counts < min_trades
-    coin_dep_mask = max_coin_shares >= 0.60
-    low_pf_mask = profit_factors < 1.20
-    risk_mask = unrealized_ratios >= 0.50
+    coin_dep_mask = max_coin_shares >= score_thresholds.max_coin_profit_share_exclusion
+    low_pf_mask = profit_factors < score_thresholds.min_profit_factor
+    # 未実現損失による除外はスコアリング側と同じ機能フラグ・条件でゲートする
+    # (実現損益がプラスのウォレットのみ対象)。userFills には通常
+    # unrealizedPnl が含まれず、デフォルトでは無効。
+    if perp_score.ENABLE_UNREALIZED_LOSS_EXCLUSION:
+        risk_mask = (realized_pnl > 0) & (
+            unrealized_ratios >= score_thresholds.unrealized_loss_to_profit_exclusion
+        )
+    else:
+        risk_mask = pd.Series(False, index=df.index)
 
     # Build reason strings vectorized
     reason_parts = pd.Series("", index=df.index)

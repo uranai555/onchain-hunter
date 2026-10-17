@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -7,13 +8,31 @@ from typing import Any
 
 import pandas as pd
 import requests
+from dotenv import load_dotenv
 
 from src.utils.io import ensure_directory, load_candidate_wallets
+from src.utils.logger import get_logger
+
+# README のセットアップ手順 (.env.example -> .env) で設定した
+# HL_RATE_LIMIT_DELAY / HL_MAX_RETRIES が反映されるよう、
+# モジュール定数を評価する前に .env を読み込む。
+load_dotenv()
 
 INFO_ENDPOINT = "https://api.hyperliquid.xyz/info"
 PAGE_LIMIT = 500
-RATE_LIMIT_DELAY = 3.5    # seconds between wallet API calls
-MAX_RETRIES = 3
+# ウォレットごとのAPI呼び出し間隔 (秒)。短くすると高速だが 429 (レート制限) リスク増。
+# 環境変数 HL_RATE_LIMIT_DELAY で上書き可能。
+RATE_LIMIT_DELAY = float(os.getenv("HL_RATE_LIMIT_DELAY", "3.5"))
+# API 呼び出し失敗時の最大試行回数 (回、初回リクエストを含む)。増やすと粘り強くなるが遅延・負荷増。
+# 環境変数 HL_MAX_RETRIES で上書き可能。0 以下でも最低1回は取得を試行する
+# (0 のままだと取得自体がスキップされ、既存キャッシュが削除されるため)。
+def _max_retries_from_env() -> int:
+    return max(1, int(os.getenv("HL_MAX_RETRIES", "3")))
+
+
+MAX_RETRIES = _max_retries_from_env()
+
+logger = get_logger("hyperliquid")
 
 
 def _to_millis(dt: datetime) -> int:
@@ -89,13 +108,15 @@ def fetch_user_fills(address: str, lookback_days: int = 90) -> list[dict[str, An
 
 def _fetch_with_retry(address: str, lookback_days: int) -> list[dict[str, Any]]:
     """Fetch fills for one wallet with retry on 429."""
-    for attempt in range(MAX_RETRIES):
+    # 初回リクエストは MAX_RETRIES が 0 以下でも必ず実行する (最低1試行)。
+    max_attempts = max(1, MAX_RETRIES)
+    for attempt in range(max_attempts):
         try:
             return fetch_user_fills(address, lookback_days=lookback_days)
         except requests.HTTPError as exc:
-            if exc.response is not None and exc.response.status_code == 429 and attempt < MAX_RETRIES - 1:
+            if exc.response is not None and exc.response.status_code == 429 and attempt < max_attempts - 1:
                 wait = RATE_LIMIT_DELAY * (attempt + 2)
-                print(f"[hyperliquid] 429 on {address[:14]}.., retrying in {wait:.0f}s ...")
+                logger.warning("429 on %s.., retrying in %.0fs ...", address[:14], wait)
                 time.sleep(wait)
             else:
                 raise
@@ -111,7 +132,6 @@ def _cache_is_fresh(cache_path: Path, max_age_hours: float) -> bool:
     """Check if a parquet cache file exists and is younger than max_age_hours."""
     if not cache_path.exists() or max_age_hours <= 0:
         return False
-    import os
     age_seconds = time.time() - os.path.getmtime(cache_path)
     return age_seconds < max_age_hours * 3600
 
@@ -145,9 +165,11 @@ def fetch_all_wallets(config: dict[str, Any]) -> pd.DataFrame:
                 (account_values >= min_val) &
                 (account_values <= max_val)
             ]
-            print(
-                f"[hyperliquid] Account value filter: {len(wallets_df)} wallets "
-                f"in range ${min_val:,.0f}-${max_val:,.0f}"
+            logger.info(
+                "Account value filter: %d wallets in range $%s-$%s",
+                len(wallets_df),
+                f"{min_val:,.0f}",
+                f"{max_val:,.0f}",
             )
         addresses = wallets_df["wallet_address"].dropna().astype(str).str.strip().str.lower().tolist()
     elif isinstance(wallets_df, list):
@@ -155,7 +177,7 @@ def fetch_all_wallets(config: dict[str, Any]) -> pd.DataFrame:
     else:
         addresses = []
     if not addresses:
-        print("[hyperliquid] No candidate wallets found.")
+        logger.info("No candidate wallets found.")
         return pd.DataFrame()
 
     # Cache TTL check: skip re-fetch if cache is fresh enough
@@ -165,19 +187,19 @@ def fetch_all_wallets(config: dict[str, Any]) -> pd.DataFrame:
             if not cached.empty and "wallet_address" in cached.columns and addresses:
                 cached_addresses = cached["wallet_address"].astype(str).str.strip().str.lower()
                 cached = cached[cached_addresses.isin(addresses)]
-            print(f"[hyperliquid] Cache is fresh ({cache_ttl_hours}h TTL), using {len(cached)} cached fills")
+            logger.info("Cache is fresh (%sh TTL), using %d cached fills", cache_ttl_hours, len(cached))
             return cached
         except Exception:
-            print("[hyperliquid] Could not read fresh cache, re-fetching")
+            logger.warning("Could not read fresh cache, re-fetching")
 
     # Load existing cache
     existing_fills = pd.DataFrame()
     if output_path.exists():
         try:
             existing_fills = pd.read_parquet(output_path)
-            print(f"[hyperliquid] Loaded {len(existing_fills)} existing fills from cache")
+            logger.info("Loaded %d existing fills from cache", len(existing_fills))
         except Exception:
-            print("[hyperliquid] Could not read existing fills cache, starting fresh")
+            logger.warning("Could not read existing fills cache, starting fresh")
     if not existing_fills.empty and "wallet_address" in existing_fills.columns:
         existing_fills = existing_fills.copy()
         existing_fills["wallet_address"] = existing_fills["wallet_address"].map(_normalise_address)
@@ -189,15 +211,15 @@ def fetch_all_wallets(config: dict[str, Any]) -> pd.DataFrame:
     refreshed_addresses: set[str] = set()
     for address in addresses:
         norm = _normalise_address(address)
-        print(f"[hyperliquid] Fetching fills for {address[:14]}.. ...")
+        logger.info("Fetching fills for %s.. ...", address[:14])
         try:
             fills = _fetch_with_retry(address, lookback_days=lookback_days)
             new_rows.extend(fills)
             refreshed_addresses.add(norm)
-            print(f"[hyperliquid]  {address[:14]}..: {len(fills)} fills")
+            logger.info("%s..: %d fills", address[:14], len(fills))
             time.sleep(RATE_LIMIT_DELAY)
         except Exception as exc:
-            print(f"[hyperliquid]  Failed {address[:14]}.. (keeping cached fills): {exc}")
+            logger.warning("Failed %s.. (keeping cached fills): %s", address[:14], exc)
             time.sleep(RATE_LIMIT_DELAY)
 
     # Merge new data with existing. Drop cached rows for wallets we refreshed so
@@ -216,7 +238,7 @@ def fetch_all_wallets(config: dict[str, Any]) -> pd.DataFrame:
             all_rows.append(new_df)
 
     if not all_rows:
-        print("[hyperliquid] No fills data at all.")
+        logger.info("No fills data at all.")
         return pd.DataFrame()
 
     df = pd.concat(all_rows, ignore_index=True)
@@ -237,5 +259,5 @@ def fetch_all_wallets(config: dict[str, Any]) -> pd.DataFrame:
 
     ensure_directory(output_path.parent)
     df.to_parquet(output_path, index=False)
-    print(f"[hyperliquid] Saved {len(df)} fills ({df['wallet_address'].nunique()} wallets) -> {output_path}")
+    logger.info("Saved %d fills (%d wallets) -> %s", len(df), df["wallet_address"].nunique(), output_path)
     return df
